@@ -24,7 +24,7 @@ $ftp->binary();
 
 $ftp->cwd($remote_path);
 
-$ftp->rput( SymlinkIgnore => 1 );
+$ftp->rput( SymlinkFollow => 1, SymlinkCopy => 1 );
 
 $ftp->quit;
 

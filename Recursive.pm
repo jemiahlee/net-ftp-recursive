@@ -5,7 +5,7 @@ use Carp;
 use strict;
 
 our @ISA = qw|Net::FTP|;
-our $VERSION = '1.2';
+our $VERSION = '1.4';
 
 ###################################################################
 # Constants for the different file types
@@ -82,11 +82,34 @@ sub _rget {
 
       if ( $options{SymlinkIgnore} ) {
 	print STDERR "Ignoring the symlink ", $file->filename(), ".\n" if $ftp->debug;
-      } elsif ( $options{SymlinkCopy} ) {
-	$ftp->get( $file->linkName() );
       } elsif ( $options{SymlinkLink}) {
 	#we need to make the symlink and that's it.
 	symlink $file->linkName(), $file->filename();
+      } else {
+	#otherwise we need to see if it points to a directory
+	if ( $ftp->cwd($file->filename()) ) {
+	  $ftp->cdup;
+	  push @dirs, $file if $options{SymlinkFollow};
+	} elsif ( $options{SymlinkCopy} ) { #if it's not and
+	                                    #SymlinkCopy is set,
+                                            #we'll copy the file
+	  my $filename = $file->filename();
+
+	  #symlink to non-directory.  need to grab it and
+	  #make sure the filename does not collide
+
+	  if ( $options{FlattenTree} and $filesSeen{$filename}) {
+	    print STDERR "Retrieving $filename as $filename.$filesSeen{$filename}.\n" if $ftp->debug;
+	    $ftp->get( $filename, "$filename.$filesSeen{$filename}" );
+	  } else {
+	    print STDERR "Retrieving $filename.\n" if $ftp->debug;
+	    $ftp->get( $filename );
+	  }
+
+	  $filesSeen{$filename}++;
+
+	}
+
       }
 
     }
@@ -111,11 +134,11 @@ sub _rget {
     $ftp->cwd( $file->filename() );
 
     #need to recurse
-    print STDERR 'Calling rftp in ', $ftp->pwd, "on ", $file->filename(), "\n" if $ftp->debug;
+    print STDERR 'Calling rget in ', $ftp->pwd, "\n" if $ftp->debug;
     $ftp->_rget( );
 
     #once we've recursed, we'll go back up a dir.
-    print STDERR "Returned from rftp in " . $ftp->pwd . ".\n" if $ftp->debug;
+    print STDERR "Returned from rget in " . $ftp->pwd . ".\n" if $ftp->debug;
     $ftp->cdup;
     chdir ".." unless $options{FlattenTree};
 
@@ -194,14 +217,30 @@ sub _rput {
 
       if ( $options{SymlinkIgnore} ) {
 	print STDERR "Not doing anything to ", $file->filename(), " as it is a link.\n" if $ftp->debug;
-      } elsif ( $options{SymlinkCopy} ) {
-	$ftp->put( $file->linkName() );
-      }
+      } else {
 
+	if ( -f $file->filename() and $options{SymlinkCopy} ) {
+	  my $filename = $file->filename();
+	  if ( $options{FlattenTree} and $filesSeen{$filename}) {
+	    print STDERR "Sending $filename as $filename.$filesSeen{$filename}.\n" if $ftp->debug;
+	    $ftp->put( $filename, "$filename.$filesSeen{$filename}" );
+	  } else {
+	    print STDERR "Sending $filename.\n" if $ftp->debug;
+	    $ftp->put( $filename );
+	  }
+	  $filesSeen{$filename}++;
+	} elsif ( -d $file->filename() and $options{SymlinkFollow} ) {
+	  #then it's a directory, we need to add it to the
+	  #list of directories to grab
+	  push @dirs, $file;
+	}
+      }
     }
 
   }
 
+  #we might use this in the loop if we follow a symlink
+  my $local_dir;
 
   foreach my $file (@dirs) {
 
@@ -216,19 +255,33 @@ sub _rput {
     }
 
 
+    #unfortunately, perl doesn't seem to keep track of
+    #symlinks very well, so we'll use an absolute path to
+    #chdir at the end.
+
+    if ( $file->isSymlink() ) {
+      $local_dir = `pwd`;
+      chomp $local_dir;
+    }
+
     chdir $file->filename() or
-      croak ("Could not change to the local directory "
+      croak ('Could not change to the local directory '
 	     . $file->filename() . "!");
 
     print STDERR "Calling rput in ", $ftp->pwd, "\n" if $ftp->debug;
     $ftp->_rput( );
 
     #once we've recursed, we'll go back up a dir.
-    print STDERR "Returned from rftp in ",
+    print STDERR 'Returned from rput in ',
       $file->filename(), ".\n" if $ftp->debug;
 
     $ftp->cdup unless $options{FlattenTree};
-    chdir "..";
+
+    if ( $file->isSymlink() ) {
+      chdir $local_dir;
+    } else {
+      chdir '..';
+    }
 
   }
 
@@ -477,9 +530,14 @@ the rget call (ie, $ftp->rget(SymlinkIgnore => 1)):
 
 =item SymlinkIgnore - disregards symlinks
 
-=item SymlinkCopy - copies the link target from the server to the client (if accessible)
+=item SymlinkCopy - copies the link target from the server to the client (if accessible).  Works on files other than a directory.  For directories, see the C<SymlinkFollow> option.
 
 =item SymlinkLink - creates the link on the client.
+
+=item SymLinkFollow - will recurse into a symlink if it
+points to a directory.  This does not do cycle checking, use
+with caution.  This option may be given along with one of
+the others above.
 
 =back
 
@@ -514,6 +572,11 @@ the rput call (ie, $ftp->rput(SymlinkIgnore => 1)):
 =item SymlinkIgnore - disregards symlinks
 
 =item SymlinkCopy - will copy the link target from the client to the server.
+
+=item SymLinkFollow - will recurse into a symlink if it
+points to a directory.  This does not do cycle checking, use
+with caution.  This option may be given along with one of
+the others above.
 
 =back
 
@@ -621,6 +684,8 @@ these three fields should be set to a "true" value.
 =head1 TODO LIST
 
 =over
+
+=item Cycle checking with symlinks (in progress)
 
 =item Allow for formats to be given for output on rdir/rls.
 
