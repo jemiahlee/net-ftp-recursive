@@ -5,7 +5,7 @@ use Carp;
 use strict;
 
 our @ISA = qw|Net::FTP|;
-our $VERSION = '1.1';
+our $VERSION = '1.2';
 
 ###################################################################
 # Constants for the different file types
@@ -62,14 +62,15 @@ sub _rget {
 
       print STDERR "Making dir: " . $file->filename() . "\n" if $ftp->debug;
 
-      mkdir $file->filename(), "0755" and #mkdir, ignore errors due to
-	                           #pre-existence
+      unless ( $options{FlattenTree} ) {
+	mkdir $file->filename(), "0755"; #mkdir, ignore errors due to
+                                         #pre-existence
 
-      chmod 0755, $file->filename(); # just in case the UMASK in the
-                                     # mkdir doesn't work
-
-      chdir $file->filename() or
-	croak('Could not change to the local directory ' . $file->filename() . '!');
+	chmod 0755, $file->filename();   # just in case the UMASK in the
+                                         # mkdir doesn't work
+	chdir $file->filename() or
+	  croak('Could not change to the local directory ' . $file->filename() . '!');
+      }
 
       $ftp->cwd( $file->filename() );
 
@@ -80,7 +81,7 @@ sub _rget {
       #once we've recursed, we'll go back up a dir.
       print STDERR "Returned from rftp in " . $ftp->pwd . ".\n" if $ftp->debug;
       $ftp->cdup;
-      chdir "..";
+      chdir ".." unless $options{FlattenTree};
 
     }
 
@@ -151,11 +152,14 @@ sub _rput {
 
       print STDERR "Making dir: ", $file->filename(), "\n" if $ftp->debug;
 
-      $ftp->mkdir( $file->filename() ) or
-	croak ('Could not make remote directory ' . $ftp->pwd
-	      . '/' . $file->filename() . '!');
+      unless ( $options{FlattenTree} ) {
+	$ftp->mkdir( $file->filename() ) or
+	  croak ('Could not make remote directory ' . $ftp->pwd
+		 . '/' . $file->filename() . '!');
 
-      $ftp->cwd( $file->filename() );
+	$ftp->cwd( $file->filename() );
+      }
+
 
       chdir $file->filename() or
 	croak ("Could not change to the local directory "
@@ -168,7 +172,7 @@ sub _rput {
       print STDERR "Returned from rftp in ",
 	           $file->filename(), ".\n" if $ftp->debug;
 
-      $ftp->cdup;
+      $ftp->cdup unless $options{FlattenTree};
       chdir "..";
 
     }
@@ -370,7 +374,7 @@ Net::FTP::Recursive - Recursive FTP Client class
 
     use Net::FTP::Recursive;
 
-    $ftp = New::FTP::Recursive->new("some.host.name", Debug => 0);
+    $ftp = Net::FTP::Recursive->new("some.host.name", Debug => 0);
     $ftp->login("anonymous",'me@here.there');
     $ftp->cwd('/pub');
     $ftp->rget( ParseSub => \&yoursub );
@@ -398,7 +402,7 @@ C<Recursive> package will print some messages to C<STDERR>.
 
 =head1 CONSTRUCTOR
 
-=over 4
+=over
 
 =item new (HOST [,OPTIONS])
 
@@ -411,10 +415,10 @@ more information.
 
 =head1 METHODS
 
-=over 4
+=over
 
 
-=item rget ( [ParseSub =>\&yoursub] )
+=item rget ( [ParseSub =>\&yoursub] [FlattenTree => 1] )
 
 The recursive get method call.  This will recursively
 retrieve the ftp object's current working directory and its
@@ -426,7 +430,7 @@ server.  The default is to ignore the symlink, but you can
 control the behavior by passing one of these arguments to
 the rget call (ie, $ftp->rget(SymlinkIgnore => 1)):
 
-=over 12
+=over
 
 =item SymlinkIgnore - disregards symlinks
 
@@ -436,9 +440,12 @@ the rget call (ie, $ftp->rget(SymlinkIgnore => 1)):
 
 =back
 
+The C<FlattenTree> optional argument will retrieve all of
+the files from the remote directory structure and place them
+in the current local directory.
 
 
-=item rput ( [ParseSub => \&yoursub] [DirCommand => $cmd])
+=item rput ( [ParseSub => \&yoursub] [DirCommand => $cmd] [FlattenTree => 1])
 
 The recursive put method call.  This will recursively send the local
 current working directory and its contents to the ftp object's current
@@ -456,7 +463,7 @@ server.  The default is to ignore the symlink, but you can
 control the behavior by passing one of these arguments to
 the rput call (ie, $ftp->rput(SymlinkIgnore => 1)):
 
-=over 12
+=over
 
 =item SymlinkIgnore - disregards symlinks
 
@@ -464,9 +471,9 @@ the rput call (ie, $ftp->rput(SymlinkIgnore => 1)):
 
 =back
 
-=back
-
-
+The C<FlattenTree> optional argument will send all of
+the files from the local directory structure and place them
+in the current remote directory.
 
 =item rdir ( Filehandle => $fh [, FilenameOnly => 1 ] [, ParseSub => \&yoursub ] )
 
@@ -499,14 +506,14 @@ representing one file in a directory listing.
 
 =head1 METHODS
 
-=over 4
+=over
 
 =item new ( )
 
 This method creates the File object.  It should be passed
 several parameters.  It should always be passed:
 
-=over 16
+=over
 
 =item OriginalLine => $line
 
@@ -516,7 +523,7 @@ several parameters.  It should always be passed:
 
 And it should also be passed one (and only one) of:
 
-=over 16
+=over
 
 =item IsPlainFile => 1
 
@@ -533,7 +540,7 @@ Fields should provide an 8 element list that supplies
 information about the file.  The fields, in order, should
 be:
 
-=over 16
+=over
 
 =item Permissions
 
@@ -564,7 +571,7 @@ these three fields should be set to a "true" value.
 
 =head1 TODO LIST
 
-=over 4
+=over
 
 =item Allow for formats to be given for output on rdir/rls.
 
