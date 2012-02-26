@@ -1,8 +1,8 @@
 Revision history for Perl extension Net::FTP::Recursive.
 
 1.0  Tue Jan 21 09:08:15 2003
-	- original version; created by h2xs 1.22 with options
-		-X -v 1.0 -n Net::FTP::Recursive
+    - original version; created by h2xs 1.22 with options
+        -X -v 1.0 -n Net::FTP::Recursive
 
 1.1  Added rdir and rls methods.
 
@@ -11,14 +11,14 @@ Revision history for Perl extension Net::FTP::Recursive.
 1.5  -Fixed bug that caused an infinite loop when a directory was unreachable.
      -Added rdelete method.
      -Added RemoveRemoteFiles and RemoveLocalFiles options.
-     
-1.6 
+
+1.6
     -Fixed problems on some platforms where empty directories would
      cause problems.  Specifically, an undef would get passed around
      and cause havoc when methods were called on them.  Seen only on
      Windows platforms, as far as I know.
     -Fixed a bug with symlinks, where a symlink referring to a directory
-     would not take you back to the original directory when doing a 
+     would not take you back to the original directory when doing a
      cdup.  Now it manually retrieves the path first and cwd's back
      to that dir.
     -Added code to test for cycles and to be smart and make symlinks
@@ -34,7 +34,7 @@ Revision history for Perl extension Net::FTP::Recursive.
      deleted.
 
 1.7
-     -Fixed rdir when used with symlinks.  Now it should note cycles 
+     -Fixed rdir when used with symlinks.  Now it should note cycles
       and not follow them.
      -Reduced the # of redundant calls to $ftp->pwd and on getting the
       local pwd.
@@ -58,7 +58,7 @@ Revision history for Perl extension Net::FTP::Recursive.
       if Net::FTP->new returns undef, rather than croaking.
      -All "<variable> = undef;" lines have been changed to
       "undef <variable>;" as the former doesn't seem to work on
-      some (every?) platform now.
+      some (every?) platforms now.
 
 1.10
      -Added "CheckSizes" option that will compare the remote filesize
@@ -74,3 +74,9 @@ Revision history for Perl extension Net::FTP::Recursive.
      -Added carping for when the rls/rdir functions are not
       given FileHandles.
      -Added "PrintType" option to rls and rdir.
+
+2.01
+
+     -rput no longer relies on an external program to determine the list
+      of files to transfer.  It now uses opendir and readdir.
+     -Code cleanup, everywhere.

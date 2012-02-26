@@ -8,5 +8,5 @@ WriteMakefile(
     'PREREQ_PM'		=> { 'Net::FTP' => 0 }, # e.g., Module::Name => 1.1
     ($] >= 5.005 ?    ## Add these new keywords supported since 5.005
       (ABSTRACT_FROM => 'Recursive.pm', # retrieve abstract from module
-       AUTHOR     => 'Jeremiah Lee <texasjdl@yahoo.com>') : ()),
+       AUTHOR     => 'Jeremiah Lee <texasjdl_AT_yahoo_DOT_com>') : ()),
 );
