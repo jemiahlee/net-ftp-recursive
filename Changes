@@ -64,3 +64,6 @@ Revision history for Perl extension Net::FTP::Recursive.
      -Added "CheckSizes" option that will compare the remote filesize
       with the local file size before deleting.
 
+1.11
+     -Added "CheckSizes" option to the rput method.
+

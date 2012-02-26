@@ -8,7 +8,7 @@ use vars qw/@ISA $VERSION $file_type $dir_type $link_type/;
 use vars qw/%options %filesSeen %dirsSeen %linkMap $success/;
 
 @ISA = qw|Net::FTP|;
-$VERSION = '1.10';
+$VERSION = '1.11';
 
 ###################################################################
 # Constants for the different file types
@@ -422,15 +422,29 @@ sub _rput {
 	$put_success = $ftp->put( $filename, "$filename.$filesSeen{$filename}");
       } else {
 	print STDERR "Sending $filename.\n" if $ftp->debug;
+
+	#I've saved $put_success here, but apparently the
+	#return val isn't very useful-can probably stop
+	#saving it
 	$put_success = $ftp->put( $filename );
       }
 
       $filesSeen{$filename}++ if $options{FlattenTree};
 
       if ( $options{RemoveLocalFiles} ) {
-	print STDERR 'Removing \'', $file->filename(),
-	  "' from the local system.\n" if $ftp->debug;
-	unlink $file->filename();
+	if ( $options{CheckSizes} ) {
+	  if ( $ftp->size($filename) == (-s $filename) ) {
+	    print STDERR 'Removing \'', $file->filename(),
+	      "' from the local system.\n" if $ftp->debug;
+	    unlink $file->filename();
+	  } else {
+	    print STDERR "Will not delete '$filename': remote file size and local file size do not match!\n" if $ftp->debug;
+	  }
+	} else { #don't care about checking the sizes
+	  print STDERR 'Removing \'', $file->filename(),
+	    "' from the local system.\n" if $ftp->debug;
+	  unlink $file->filename();
+	}
       }
 
     }
@@ -1136,8 +1150,7 @@ only if they are the same will it delete the file.  You must
 l provide the C<RemoveRemoteFiles> option in order for
 option to affect the behavior of the code.  This check will
 only be performed for regular files, not directories or
-symlinks.  This is a new option as of v1.10, and it is 
-currently only implemented for rget, not rput.
+symlinks.
 
 For the v1.6 release, I have also added some additional
 functionality that will allow the client to be more specific
@@ -1222,10 +1235,17 @@ the number of times it has retrieved a file with that name.
 The optional C<RemoveLocalFiles> argument to the function
 will allow the client to delete files from the client after
 it sends them.  The default behavior is to leave all files
-and directories intact.  This option will only attempt to
-delete files that were actually transferred, symlinks
-(unless you set SymlinkCopy and it is a plain file) will not
-be removed (and of course any non-empty directories).
+and directories intact.  This option is very unintelligent,
+it does a delete no matter what.
+
+As of v1.11, there is a C<CheckSizes> option that can be
+used in conjunction with the C<RemoveLocalFiles> that will
+check the filesize of the file locally against the remote
+filesize and only delete if the two are the same.  This
+option only affects regular files, not symlinks or
+directories.  This option does not affect the normal
+behavior of C<RemoveRemoteFiles> option (ie, it will try to
+delete symlinks and directories no matter what).
 
 =item rdir ( Filehandle => $fh [, FilenameOnly => 1]
              [, ParseSub => \&yoursub ] )
@@ -1368,10 +1388,11 @@ Chris Smith - for RemoveRemoteFiles code.
 Zainul Charbiwala - bug report & code to fix.
 Brian McGraw - bug report & feature request.
 Isaac Koenig - bug report
+Anyone else who gave me input on the module.
 
 =head1 COPYRIGHT
 
-Copyright (c) 2001-2003 Jeremiah Lee.
+Copyright (c) 2001-2004 Jeremiah Lee.
 
 This program is free software; you may redistribute it and/or
 modify it under the same terms as Perl itself.

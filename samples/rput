@@ -34,6 +34,6 @@ sub usage {
   my($name) = $0;
   $name =~ s/.*\///;
 
-  print STDERR "Usage: $name <host> <username> <passwd> <remote_path> <local_path>\n";
+  print STDERR "Usage: $name <host> <username> <passwd> <remote_path> <local_path> [option1 option2 ...]\n";
   exit;
 }
