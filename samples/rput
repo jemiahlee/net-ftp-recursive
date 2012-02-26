@@ -1,0 +1,37 @@
+#!/usr/bin/perl
+
+use Net::FTP::Recursive;
+
+####################################################################
+#should use Getopt::Long for command line args, will deal with that
+#later.  For now, will assume just a few args, as well as validity.
+####################################################################
+
+usage() unless @ARGV == 5;
+
+$host = shift;
+$username = shift;
+$passwd = shift;
+$remote_path = shift; #where to put
+$local_path = shift; #where to grab dir structure on local box.
+
+chdir $local_path or die "could not change dir to $local_path!";
+
+$ftp = Net::FTP::Recursive->new($host, Debug => 1);
+
+$ftp->login($username, $passwd) or die "Could not log in!";
+$ftp->binary();
+
+$ftp->cwd($remote_path);
+
+$ftp->rput( symlink_ignore => 1 );
+
+$ftp->quit;
+
+sub usage {
+  my($name) = $0;
+  $name =~ s/.*\///;
+
+  print STDERR "Usage: $name <host> <username> <passwd> <remote_path> <local_path>\n";
+  exit;
+}

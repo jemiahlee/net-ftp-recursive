@@ -1,0 +1,6 @@
+Revision history for Perl extension Net::FTP::Recursive.
+
+1.0  Tue Jan 21 09:08:15 2003
+	- original version; created by h2xs 1.22 with options
+		-X -v 1.0 -n Net::FTP::Recursive
+
