@@ -4,7 +4,7 @@ use Net::FTP;
 use strict;
 
 our @ISA = qw|Net::FTP|;
-our $VERSION = '1.6';
+our $VERSION = '1.7';
 
 ###################################################################
 # Constants for the different file types
@@ -72,15 +72,19 @@ sub _rget {
 
   print STDERR join("\n",map { $_->originalLine() } @files),"\n" if $ftp->debug;
 
+
+  my $remote_pwd = $ftp->pwd;
+  my $local_pwd = `pwd`; chomp $local_pwd;
+
  FILE:
   foreach my $file (@files){
     #used to make sure that if we're deleting the files, we
     #successfully retrieved the file
     my $get_success;
+    my $filename = $file->filename();
 
     #if it's not a directory we just need to get the file.
     if ( $file->isPlainFile() ) {
-      my $filename = $file->filename();
 
       next FILE if $options{MatchFiles}
 	           and $filename !~ $options{MatchFiles};
@@ -108,8 +112,6 @@ sub _rget {
     #if it's a directory, we have more work to do.
     elsif ( $file->isDirectory() ) {
 
-      my $filename = $file->filename();
-
       next FILE if $options{MatchDirs}
 	           and $filename !~ $options{MatchDirs};
 
@@ -117,9 +119,6 @@ sub _rget {
 	           and $filename =~ $options{OmitDirs};
 
       if ( $options{SymlinkFollow} ) {
-
-	my $remote_pwd = $ftp->pwd;
-	my $local_pwd = `pwd`; chomp $local_pwd;
 
 	$dirsSeen{qq<$remote_pwd/$filename>} = qq<$local_pwd/$filename>;
 	print STDERR qq<Mapping '$remote_pwd/$filename' to '$local_pwd/$filename'.\n>;
@@ -144,29 +143,14 @@ sub _rget {
 
       }
 
-
-      my $filename = $file->filename;
-
       next FILE if $options{MatchLinks}
 	           and $filename !~ $options{MatchLinks};
 
       next FILE if $options{OmitLinks}
 	           and $filename =~ $options{OmitLinks};
 
-      if ( $options{SymlinkLink}) {
-	#we need to make the symlink and that's it.
-	symlink $file->linkName(), $file->filename();
-	if ( $options{RemoveRemoteFiles} ) {
-	  $ftp->delete( $file->filename );
-	  print STDERR 'Deleting \'', $file->filename,
-	    "'.\n" if $ftp->debug;
-	}
-	next FILE; #skip the stuff further in the if block
-
-      }
-
       #otherwise we need to see if it points to a directory
-      print STDERR "Testing to see if it refers to a directory.\n" if $ftp->debug;
+      print STDERR "Testing to see if $filename refers to a directory.\n" if $ftp->debug;
       my $path_before_chdir = $ftp->pwd;
       my $is_directory = 0;
 
@@ -178,7 +162,6 @@ sub _rget {
       if ( not $is_directory and $options{SymlinkCopy} ) { #if it's not and
 	                                                   #SymlinkCopy is set,
                                                            #we'll copy the file
-	my $filename = $file->filename();
 
 	#symlink to non-directory.  need to grab it and
 	#make sure the filename does not collide
@@ -200,10 +183,6 @@ sub _rget {
       } #end of if (not $is_directory and $options{SymlinkCopy}
 
       elsif ( $is_directory and $options{SymlinkFollow} ) {
-
-	my $filename = $file->filename();
-	my $remote_pwd = $ftp->pwd;
-	my $local_pwd = `pwd`; chomp $local_pwd;
 
 	#we need to resolve the link to an absolute path
 
@@ -253,19 +232,32 @@ sub _rget {
 	  print STDERR "New directory to grab!\n";
 	  push @dirs, $file;
 
-	  my $filename = $file->filename();
-	  my $remote_pwd = $ftp->pwd;
-	  my $local_pwd = `pwd`; chomp $local_pwd;
-
-	  #$dirsSeen{qq<$remote_pwd/$filename>} = qq<$local_pwd/$filename>;
-	  print STDERR qq<3:Mapping '$remote_pwd/$filename' to '$local_pwd/$filename'.\n>;
 	  $dirsSeen{$remote_abs_path} = qq<$local_pwd/$filename>;
-	  print STDERR qq<4:Mapping '$remote_abs_path' to '$local_pwd/$filename'.\n>;
+	  print STDERR qq<Mapping '$remote_abs_path' to '$local_pwd/$filename'.\n>;
 	  #no deletion, will handle that down below.
 
 	}
 
-      } #end of if($is_directory and $options{SymlinkFollow})
+      } #end of elsif($is_directory and $options{SymlinkFollow})
+
+      # if it's a dir and SymlinkFollow is not set but
+      # SymlinkLink is set, we'll just create the link.
+
+      # OR
+
+      # if it was a file and SymlinkCopy is not set but
+      # SymlinkLink is, we'll just create the link.
+
+      elsif ( $options{SymlinkLink} ) {
+	#we need to make the symlink and that's it.
+	symlink $file->linkName(), $file->filename();
+	if ( $options{RemoveRemoteFiles} ) {
+	  $ftp->delete( $file->filename );
+	  print STDERR 'Deleting \'', $file->filename,
+	    "'.\n" if $ftp->debug;
+	}
+	next FILE;
+      } #end of elsif( $options{SymlinkLink} ){
 
     }
 
@@ -274,33 +266,33 @@ sub _rget {
 
 
   #this will do depth-first retrieval
-  my $ftp_pwd = $ftp->pwd;
 
   foreach my $file (@dirs) {
+
+    my $filename = $file->filename;
 
     #check to make sure that we actually have permissions to
     #change into the directory
 
-    unless ( $ftp->cwd($file->filename()) ) {
-      print STDERR 'Was unable to cd to ', $file->filename,
+    unless ( $ftp->cwd($filename) ) {
+      print STDERR 'Was unable to cd to ', $filename,
 	", skipping!\n" if $ftp->debug;
       next;
     }
 
     unless ( $options{FlattenTree} ) {
-      print STDERR "Making dir: " . $file->filename() . "\n" if $ftp->debug;
+      print STDERR "Making dir: " . $filename . "\n" if $ftp->debug;
 
-      mkdir $file->filename(), "0755"; #mkdir, ignore errors due to
+      mkdir $filename, "0755"; #mkdir, ignore errors due to
                                        #pre-existence
 
-      chmod 0755, $file->filename();   # just in case the UMASK in the
+      chmod 0755, $filename;   # just in case the UMASK in the
                                          # mkdir doesn't work
 
-
-      unless ( chdir $file->filename() ){
+      unless ( chdir $filename ){
 	print STDERR 'Could not change to the local directory ',
-	  $file->filename, "!\n" if $ftp->debug;
-	$ftp->cwd( $ftp_pwd );
+	  $filename, "!\n" if $ftp->debug;
+	$ftp->cwd( $remote_pwd );
 	next;
       }
     }
@@ -314,14 +306,14 @@ sub _rget {
     }
 
     #need to recurse
-    print STDERR 'Calling rget in ', $ftp_pwd, "\n" if $ftp->debug;
+    print STDERR 'Calling rget in ', $remote_pwd, "\n" if $ftp->debug;
     $ftp->_rget( );
 
     #once we've recursed, we'll go back up a dir.
-    print STDERR "Returned from rget in " . $ftp_pwd . ".\n" if $ftp->debug;
+    print STDERR "Returned from rget in " . $remote_pwd . ".\n" if $ftp->debug;
 
     if ( $file->isSymlink() ) {
-      $ftp->cwd( $ftp_pwd );
+      $ftp->cwd( $remote_pwd );
       $options{RemoveRemoteFiles} = $remove;
     } else {
       $ftp->cdup;
@@ -331,13 +323,13 @@ sub _rget {
 
     if ( $options{RemoveRemoteFiles} ) {
       if ( $file->isSymlink() ) {
-	print STDERR 'Removing symlink \'', $file->filename(),
+	print STDERR 'Removing symlink \'', $filename,
 	  "'.\n" if $ftp->debug;
-	$ftp->delete( $file->filename() );
+	$ftp->delete( $filename );
       } else {
-	print STDERR 'Removing directory\'', $file->filename(),
+	print STDERR 'Removing directory\'', $filename,
 	  "'.\n" if $ftp->debug;
-	$ftp->rmdir( $file->filename() );
+	$ftp->rmdir( $filename );
       }
     }
   }
@@ -387,12 +379,14 @@ sub _rput {
 
   print STDERR join("\n", map { $_->originalLine() } @files),"\n" if $ftp->debug;
 
+  my $remote_pwd = $ftp->pwd;
+
   foreach my $file (@files){
     my $put_success;
+    my $filename = $file->filename(); #we're gonna need it a lot here
     #if it's a file we just need to put the file
 
     if ( $file->isPlainFile() ) {
-      my $filename = $file->filename(); #we're gonna need it a lot here
 
       #we're going to check for filename conflicts here if
       #the user has opted to flatten out the tree
@@ -436,7 +430,6 @@ sub _rput {
       } else {
 
 	if ( -f $file->filename() and $options{SymlinkCopy} ) {
-	  my $filename = $file->filename();
 	  if ( $options{FlattenTree} and $filesSeen{$filename}) {
 	    print STDERR "Sending $filename as $filename.$filesSeen{$filename}.\n" if $ftp->debug;
 	    $put_success = $ftp->put( $filename, "$filename.$filesSeen{$filename}" );
@@ -464,57 +457,53 @@ sub _rput {
   }
 
   #we might use this in the loop if we follow a symlink
-  my $local_dir;
+  #unfortunately, perl doesn't seem to keep track of
+  #symlinks very well, so we'll use an absolute path to
+  #chdir at the end.
+  my $local_pwd  = `pwd`;
+  chomp $local_pwd;
 
   foreach my $file (@dirs) {
 
-    #unfortunately, perl doesn't seem to keep track of
-    #symlinks very well, so we'll use an absolute path to
-    #chdir at the end.
-
-    if ( $file->isSymlink() ) {
-      $local_dir = `pwd`;
-      chomp $local_dir;
-    }
-
+    my $filename = $file->filename();
 
     unless ( $options{FlattenTree} ) {
 
-      print STDERR "Making dir: ", $file->filename(), "\n" if $ftp->debug;
-      unless( $ftp->mkdir($file->filename) ){
+      print STDERR "Making dir: ", $filename, "\n" if $ftp->debug;
+      unless( $ftp->mkdir($filename) ){
 	print STDERR 'Could not make remote directory ',
-	  $file->filename(), "!\n" if $ftp->debug;
+	  $filename, "!\n" if $ftp->debug;
       }
 
-      unless ( $ftp->cwd($file->filename()) ){
+      unless ( $ftp->cwd($filename) ){
 	print STDERR 'Could not change remote directory to ',
-	  $file->filename(), ", skipping!\n" if $ftp->debug;
+	  $filename, ", skipping!\n" if $ftp->debug;
 	next;
       }
     }
 
-    unless ( chdir $file->filename() ){
+    unless ( chdir $filename ){
       print STDERR 'Could not change to the local directory ',
-	$file->filename(), "!\n" if $ftp->debug;
+	$filename, "!\n" if $ftp->debug;
       $ftp->cdup;
       next;
     }
 
-    print STDERR "Calling rput in ", $ftp->pwd, "\n" if $ftp->debug;
+    print STDERR "Calling rput in ", $remote_pwd, "\n" if $ftp->debug;
     $ftp->_rput( );
 
     #once we've recursed, we'll go back up a dir.
     print STDERR 'Returned from rput in ',
-      $file->filename(), ".\n" if $ftp->debug;
+      $filename, ".\n" if $ftp->debug;
 
     $ftp->cdup unless $options{FlattenTree};
 
     if ( $file->isSymlink() ) {
-      chdir $local_dir;
-      unlink $file->filename if $options{RemoveLocalFiles};
+      chdir $local_pwd;
+      unlink $filename if $options{RemoveLocalFiles};
     } else {
       chdir '..';
-      rmdir $file->filename if $options{RemoveLocalFiles};
+      rmdir $filename if $options{RemoveLocalFiles};
     }
 
   }
@@ -528,20 +517,27 @@ sub rdir{
 
   %options = (ParseSub => \&parse_files,
 	      OutputFormat => '%p %lc %u %g %s %d %f %l',
-	      @_
+	      @_,
+	      InitialDir => $ftp->pwd
 	     );    #setup the options
 
   return unless $options{Filehandle};
 
+  %dirsSeen = ();
+  %filesSeen = ();
+
+  $dirsSeen{$ftp->pwd}++;
+
   $ftp->_rdir;
+
+  %dirsSeen = undef;   #just make sure to cleanup for the next
+  %filesSeen = undef;  #time
 
 }
 
 sub _rdir{
 
   my($ftp) = shift;
-
-  my $dir = $ftp->pwd;
 
   my(@ls) = $ftp->dir;
 
@@ -555,17 +551,57 @@ sub _rdir{
   my $fh = $options{Filehandle};
   print $fh $ftp->pwd, ":\n" unless $options{FilenameOnly};
 
+  my $remote_pwd = $ftp->pwd;
+  my $local_pwd = `pwd`; chomp $local_pwd;
+
+ FILE:
   foreach my $file (@files) {
 
-    #if it's a directory, we need to save the name for later
+    my $filename = $file->filename;
 
-    if ( $file->isDirectory() ) {
-        push @dirs, $file->filename();
-	next;
+    if ( $file->isSymlink() ) {
+
+      if ( $ftp->cwd($filename) ) {
+	$ftp->cwd( $remote_pwd );
+
+
+	#we need to resolve the link to an absolute path
+
+	my $remote_abs_path = path_resolve( $file->linkName,
+					  $remote_pwd,
+					  $filename );
+
+	print STDERR qq<'$filename' got converted to '$remote_abs_path'.\n>;
+
+	#if it's a directory structure we've already seen,
+	#we'll just treat it as a regular file
+
+	# OR
+
+	#if it's in the same tree that we started
+	#downloading, we should get to it later, so we'll
+	#just treat it as a regular file
+
+	unless ( $dirsSeen{$remote_abs_path}
+		 or $remote_abs_path =~ m%^$options{InitialDir}% ){
+
+	  # Otherwise we need to grab the directory and put
+	  # the info in a hash in case there is another link
+	  # to this directory
+	  push @dirs, $file;
+	  $dirsSeen{$remote_abs_path}++;
+	  print STDERR qq<Mapping '$remote_abs_path' to '$dirsSeen{$remote_abs_path}'.\n>;
+
+	}
+      } #end of if( $ftp->cwd( $filename ) ){
+    } #end of if( $file->isSymlink() ){
+    elsif ( $file->isDirectory() ) {
+        push @dirs, $file;
+	next FILE if $options{FilenameOnly};
     }
 
     if( $options{FilenameOnly} ){
-      print $fh $dir, '/', $file->filename(),"\n";
+      print $fh $remote_pwd, '/', $filename,"\n";
     } else {
       print $fh $file->originalLine(), "\n";
     }
@@ -577,19 +613,27 @@ sub _rdir{
 
   print $fh "\n" unless $options{FilenameOnly};
 
-
-  my $ftp_pwd = $ftp->pwd;
-
   foreach my $dir (@dirs){
 
-    $ftp->cwd( $dir );
+    my $dirname = $dir->filename;
 
-    print STDERR "Calling rdir in ", $ftp->pwd, "\n" if $ftp->debug;
+    unless ( $ftp->cwd( $dirname ) ){
+      print STDERR 'Was unable to cd to ', $dirname,
+                   " in ", $ftp->pwd, ", skipping!\n" if $ftp->debug;
+      next;
+    }
+
+    print STDERR "Calling rdir in ", $remote_pwd, "\n" if $ftp->debug;
     $ftp->_rdir( );
 
     #once we've recursed, we'll go back up a dir.
-    print STDERR "Returned from rdir in " . $dir . ".\n" if $ftp->debug;
-    $ftp->cdup;
+    print STDERR "Returned from rdir in " . $dirname . ".\n" if $ftp->debug;
+
+    if ( $dir->isSymlink() ) {
+      $ftp->cwd($remote_pwd);
+    } else {
+      $ftp->cdup;
+    }
   }
 
 }
@@ -991,11 +1035,12 @@ the rget call (ie, $ftp->rget(SymlinkIgnore => 1)):
 
 =item SymlinkCopy - copies the link target from the server to the client (if accessible).  Works on files other than a directory.  For directories, see the C<SymlinkFollow> option.
 
-=item SymlinkLink - creates the link on the client.
-
 =item SymlinkFollow - will recurse into a symlink if it
 points to a directory.  This option may be given along with
 one of the others above.
+
+=item SymlinkLink - creates the link on the client.  This is
+superceded by each of the previous options.
 
 =back
 
@@ -1123,7 +1168,9 @@ The second, optional argument, is to retrieve only the filenames
 (including path information).  The default is to display all of the
 information returned from the $ftp-dir call.
 
-This method does NOT follow symlinks, it will only print them out.  This will be changed for the next version of the module
+This method WILL follow symlinks.  It has the same basic
+cycle-checking code that is in rget, so it should not infinitely
+loop.
 
 =item rls ( Filehandle => $fh [, ParseSub => \&yoursub] )
 
@@ -1215,11 +1262,7 @@ these three fields should be set to a "true" value.
 
 =over
 
-=item Cycle checking with symlinks (mostly finished)
-
 =item Allow for formats to be given for output on rdir/rls.
-
-=item Allow for a regex of directories/files to omit
 
 =back
 

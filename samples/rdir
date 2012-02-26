@@ -18,6 +18,11 @@ $filename = shift;
 $fh = new FileHandle;
 $fh->open(">$filename");
 
+select $fh;
+$| = 1; 
+
+select STDOUT;
+
 $ftp = Net::FTP::Recursive->new($host, Debug => 1);
 
 $ftp->login($username, $passwd) or die "Could not log in!";

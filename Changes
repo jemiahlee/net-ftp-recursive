@@ -32,3 +32,15 @@ Revision history for Perl extension Net::FTP::Recursive.
      set.  If the files will be deleted elsewhere in the
      tree via a directory, then they will obviously still be
      deleted.
+
+1.7
+     -Fixed rdir when used with symlinks.  Now it should note cycles 
+      and not follow them.
+     -Reduced the # of redundant calls to $ftp->pwd and on getting the
+      local pwd.
+     -Removed some debugging info that I had put in to debug v1.6.
+     -Made SymlinkLink superceded by the other options if
+      given.  This was to allow for the meaningful use of
+      SymlinkLink in concert with either SymlinkFollow or
+      SymlinkCopy.
+
