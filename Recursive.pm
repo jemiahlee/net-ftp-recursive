@@ -8,7 +8,7 @@ use vars qw/@ISA $VERSION $file_type $dir_type $link_type/;
 use vars qw/%options %filesSeen %dirsSeen %linkMap $success/;
 
 @ISA = qw|Net::FTP|;
-$VERSION = '1.9';
+$VERSION = '1.10';
 
 ###################################################################
 # Constants for the different file types
@@ -113,11 +113,23 @@ sub _rget {
 
       $filesSeen{$filename}++ if $options{FlattenTree};
 
-      if ( $get_success and $options{RemoveRemoteFiles} ) {
-	$ftp->delete( $filename );
-	print STDERR "Deleting '$filename'.\n" if $ftp->debug;
+      if ( $options{RemoveRemoteFiles} ) {
+	if ( $options{CheckSizes} ) {
+	  if ( -e $filename and ( (-s $filename) == $file->size ) ) {
+	    $ftp->delete( $filename );
+	    print STDERR "Deleting '$filename'.\n" if $ftp->debug;
+	  } else {
+	    print STDERR "Will not delete '$filename': remote file size and local file size do not match!\n" if $ftp->debug;
+	  }
+	} else {
+	  if ( $get_success ) {
+	    $ftp->delete( $filename );
+	    print STDERR "Deleting '$filename'.\n" if $ftp->debug;
+	  } else {
+	    print STDERR "Will not delete '$filename': error retrieving file!\n" if $ftp->debug;
+	  }
+	}
       }
-
     }
 
     #if it's a directory, we have more work to do.
@@ -971,6 +983,10 @@ sub filename{
   return $_[0]->{Fields}[6];
 }
 
+sub size{
+  return $_[0]->{Fields}[4];
+}
+
 sub linkName{
   return $_[0]->{Fields}[7];
 }
@@ -1111,7 +1127,17 @@ the number of times it has retrieved a file with that name.
 The optional C<RemoveRemoteFiles> argument to the function
 will allow the client to delete files from the server after
 it retrieves them.  The default behavior is to leave all
-files and directories intact.
+files and directories intact.  The default behavior for this
+is to check the return code from the FTP GET call.  If that
+is successful, it will delete the file.  C<CheckSizes> is an
+additional argument that will check the filesize of the
+local file against the file size of the remote file, and
+only if they are the same will it delete the file.  You must
+l provide the C<RemoveRemoteFiles> option in order for
+option to affect the behavior of the code.  This check will
+only be performed for regular files, not directories or
+symlinks.  This is a new option as of v1.10, and it is 
+currently only implemented for rget, not rput.
 
 For the v1.6 release, I have also added some additional
 functionality that will allow the client to be more specific

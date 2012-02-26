@@ -59,3 +59,8 @@ Revision history for Perl extension Net::FTP::Recursive.
      -All "<variable> = undef;" lines have been changed to
       "undef <variable>;" as the former doesn't seem to work on
       some (every?) platform now.
+
+1.10
+     -Added "CheckSizes" option that will compare the remote filesize
+      with the local file size before deleting.
+
