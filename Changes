@@ -89,3 +89,8 @@ Revision history for Perl extension Net::FTP::Recursive.
 2.04
 
     -Fixed the division bug for some of the error messages.
+    
+2.05
+    -committed into github
+    -removed CVS tag lines from files.
+    -

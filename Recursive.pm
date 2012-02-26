@@ -9,7 +9,7 @@ use vars qw/@ISA $VERSION/;
 use vars qw/%options %filesSeen %dirsSeen %linkMap $success/;
 
 @ISA = qw|Net::FTP|;
-$VERSION = '2.04';
+$VERSION = '2.05';
 
 sub new {
     my $class = shift;
@@ -1497,9 +1497,14 @@ When reporting bugs, please provide as much information as possible.
 A script that exhibits the bug would also be helpful, as well as
 output with the "Debug => 1" flag turned on in the FTP object.
 
+Also, this code is now checked in at github.com. Feel free to fork the project
+and submit requests for me to pull in changes from modifications you make.
+
+<C>git@github:jemiahlee/net-ftp-recursive.git<C>
+
 =head1 AUTHOR
 
-Jeremiah Lee <texasjdl_AT_yahoo.com>
+Jeremiah Lee <texasjdl_AT_yahoo_DOT_com>
 
 =head1 SEE ALSO
 
