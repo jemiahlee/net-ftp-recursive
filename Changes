@@ -44,3 +44,12 @@ Revision history for Perl extension Net::FTP::Recursive.
       SymlinkLink in concert with either SymlinkFollow or
       SymlinkCopy.
 
+1.8
+     -Implemented return codes for all methods.
+     -Added some memory management code to hopefully help save
+      memory when recursing.
+     -Backported the module so that it should run ok on anything perl
+      5 or greater.  Basically, I just changed the "our"s to use vars.
+     -Now using the Cwd module to get the current working directory
+      on the client machine, for platform independence.
+

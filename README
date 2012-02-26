@@ -1,4 +1,4 @@
-Net/FTP/Recursive version 1.7
+Net/FTP/Recursive version 1.8
 =============================
 
 This module augments the list of Net::FTP methods with several
@@ -16,8 +16,6 @@ There are several sample scripts that illustrate some of the
 possible usages of these methods.  Please see the "samples"
 directory in this distribution or check the documentation that
 comes with the module.
-
-This version fixes several symlink problems.
 
 INSTALLATION
 

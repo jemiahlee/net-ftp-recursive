@@ -24,9 +24,11 @@ $ftp->binary();
 
 $ftp->cwd($remote_path);
 
-$ftp->rput( map {($_, 1)} @ARGV );
+$output = $ftp->rput( map {($_, 1)} @ARGV );
 
 $ftp->quit;
+
+print qq<\$output was:\n$output>;
 
 sub usage {
   my($name) = $0;

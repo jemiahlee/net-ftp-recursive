@@ -1,23 +1,32 @@
 package Net::FTP::Recursive;
 
 use Net::FTP;
+use Cwd 'getcwd';
 use strict;
 
-our @ISA = qw|Net::FTP|;
-our $VERSION = '1.7';
+use vars qw/@ISA $VERSION $file_type $dir_type $link_type/;
+use vars qw/%options %filesSeen %dirsSeen %linkMap $success/;
+
+@ISA = qw|Net::FTP|;
+$VERSION = '1.8';
 
 ###################################################################
 # Constants for the different file types
 ###################################################################
-our $file_type = 1;
-our $dir_type = 2;
-our $link_type = 3;
+$file_type = 1;
+$dir_type = 2;
+$link_type = 3;
 
-our %options;
-our %filesSeen;
-our %dirsSeen;
-our %linkMap;
-our $success;
+sub new {
+  my $class = shift;
+
+  my $ftp = new Net::FTP(@_);
+
+  bless $ftp, $class;
+
+  return $ftp;
+
+}
 
 #------------------------------------------------------------------
 # - cd to directory, lcd to directory
@@ -45,14 +54,17 @@ sub rget{
   %filesSeen = ();
 
   if ( $options{SymlinkFollow} ) {
-    chomp( my $pwd = `pwd` );
-    $dirsSeen{ $ftp->pwd } = $pwd;
+    $dirsSeen{ $ftp->pwd } = Cwd::cwd();
   }
+
+  local $success = '';
 
   $ftp->_rget(); #do the real work here
 
   %filesSeen = ();
   %dirsSeen = ();
+
+  return $success;
 
 }
 
@@ -74,13 +86,13 @@ sub _rget {
 
 
   my $remote_pwd = $ftp->pwd;
-  my $local_pwd = `pwd`; chomp $local_pwd;
+  my $local_pwd = Cwd::cwd();
 
  FILE:
   foreach my $file (@files){
     #used to make sure that if we're deleting the files, we
     #successfully retrieved the file
-    my $get_success;
+    my $get_success = 1;
     my $filename = $file->filename();
 
     #if it's not a directory we just need to get the file.
@@ -261,9 +273,11 @@ sub _rget {
 
     }
 
-  }
+    $success .= qq<Had a problem retrieving '$remote_pwd/$filename'!\n> unless $get_success;
 
+  } #end of foreach ( @files )
 
+  @files = undef; #save memory, maybe, in recursing.
 
   #this will do depth-first retrieval
 
@@ -277,6 +291,7 @@ sub _rget {
     unless ( $ftp->cwd($filename) ) {
       print STDERR 'Was unable to cd to ', $filename,
 	", skipping!\n" if $ftp->debug;
+      $success .= qq<Was not able to chdir to '$remote_pwd/$filename'!\n>;
       next;
     }
 
@@ -284,15 +299,16 @@ sub _rget {
       print STDERR "Making dir: " . $filename . "\n" if $ftp->debug;
 
       mkdir $filename, "0755"; #mkdir, ignore errors due to
-                                       #pre-existence
+                               #pre-existence
 
       chmod 0755, $filename;   # just in case the UMASK in the
-                                         # mkdir doesn't work
+                               # mkdir doesn't work
 
       unless ( chdir $filename ){
 	print STDERR 'Could not change to the local directory ',
 	  $filename, "!\n" if $ftp->debug;
 	$ftp->cwd( $remote_pwd );
+	$success .= <Was not able to chdir to local directory '$local_pwd/$filename'!\n>;
 	next;
       }
     }
@@ -347,7 +363,7 @@ sub rput{
 
   %filesSeen = ();
 
-  local $success = 1;
+  local $success = '';
 
   $ftp->_rput(); #do the real work here
 
@@ -382,7 +398,7 @@ sub _rput {
   my $remote_pwd = $ftp->pwd;
 
   foreach my $file (@files){
-    my $put_success;
+    my $put_success = 1;
     my $filename = $file->filename(); #we're gonna need it a lot here
     #if it's a file we just need to put the file
 
@@ -396,7 +412,6 @@ sub _rput {
       } else {
 	print STDERR "Sending $filename.\n" if $ftp->debug;
 	$put_success = $ftp->put( $filename );
-	$success = $put_success if $put_success == 0;
       }
 
       $filesSeen{$filename}++ if $options{FlattenTree};
@@ -454,14 +469,17 @@ sub _rput {
       }
     }
 
+    $success .= qq<Had trouble putting $filename into $remote_pwd\n> unless $put_success;
+
   }
+
+  @files = undef; #save memory, maybe, in recursing.
 
   #we might use this in the loop if we follow a symlink
   #unfortunately, perl doesn't seem to keep track of
   #symlinks very well, so we'll use an absolute path to
   #chdir at the end.
-  my $local_pwd  = `pwd`;
-  chomp $local_pwd;
+  my $local_pwd  = Cwd::cwd();
 
   foreach my $file (@dirs) {
 
@@ -473,11 +491,13 @@ sub _rput {
       unless( $ftp->mkdir($filename) ){
 	print STDERR 'Could not make remote directory ',
 	  $filename, "!\n" if $ftp->debug;
+	$success .= qq<Could not make remote directory '$remote_pwd/$filename'!\n>;
       }
 
       unless ( $ftp->cwd($filename) ){
 	print STDERR 'Could not change remote directory to ',
 	  $filename, ", skipping!\n" if $ftp->debug;
+	$success .= qq<Could not change remote directory to '$remote_pwd/$filename'!\n>;
 	next;
       }
     }
@@ -486,6 +506,7 @@ sub _rput {
       print STDERR 'Could not change to the local directory ',
 	$filename, "!\n" if $ftp->debug;
       $ftp->cdup;
+      $success .= qq<Could not change to the local directory '$local_pwd/$filename'!\n>;
       next;
     }
 
@@ -528,10 +549,14 @@ sub rdir{
 
   $dirsSeen{$ftp->pwd}++;
 
+  local $success = '';
+
   $ftp->_rdir;
 
   %dirsSeen = undef;   #just make sure to cleanup for the next
   %filesSeen = undef;  #time
+
+  return $success;
 
 }
 
@@ -552,7 +577,7 @@ sub _rdir{
   print $fh $ftp->pwd, ":\n" unless $options{FilenameOnly};
 
   my $remote_pwd = $ftp->pwd;
-  my $local_pwd = `pwd`; chomp $local_pwd;
+  my $local_pwd = Cwd::cwd();
 
  FILE:
   foreach my $file (@files) {
@@ -619,7 +644,8 @@ sub _rdir{
 
     unless ( $ftp->cwd( $dirname ) ){
       print STDERR 'Was unable to cd to ', $dirname,
-                   " in ", $ftp->pwd, ", skipping!\n" if $ftp->debug;
+                   " in $remote_pwd, skipping!\n" if $ftp->debug;
+      $success .= qq<Was unable to cd to '$remote_pwd/$dirname'\n>;
       next;
     }
 
@@ -640,7 +666,7 @@ sub _rdir{
 
 sub rls{
   my $ftp = shift;
-  $ftp->rdir(@_, FilenameOnly => 1);
+  return $ftp->rdir(@_, FilenameOnly => 1);
 }
 
 #---------------------------------------------------------------
@@ -657,7 +683,11 @@ sub rdelete {
                @_
               );    #setup the options
 
+   local $success = '';
+
    $ftp->_rdelete(); #do the real work here
+
+   return $success;
 
 }
 
@@ -673,28 +703,37 @@ sub _rdelete {
 
   print STDERR join("\n",map { $_->originalLine() } @files),"\n" if $ftp->debug;
 
+  my $remote_pwd = $ftp->pwd;
+
   foreach my $file (@files){
 
     #just delete plain files and symlinks
     if ( $file->isPlainFile() or $file->isSymlink() ) {
       my $filename = $file->filename();
-      $ftp->delete($filename);
+      my $del_success = $ftp->delete($filename);
+      $success .= qq<Had a problem deleting '$remote_pwd/$filename'!\n> unless $del_success;
+
     }
 
     #otherwise, if it's a directory, we have more work to do.
     elsif ( $file->isDirectory() ) {
       push @dirs, $file;
     }
+
   }
+
+  @files = undef; #save memory, maybe, when recursing.
 
   #this will do depth-first delete
   foreach my $file (@dirs) {
 
+    my $filename = $file->filename();
+
     #in case we didn't have permissions to cd into that
     #directory
     unless ( $ftp->cwd( $file->filename() ) ){
-      print STDERR 'Could not change dir to ',
-	$file->filename(), "!\n" if $ftp->debug;
+      print STDERR qq<Could not change dir to $filename!\n> if $ftp->debug;
+      $success .= qq<Could not change dir to '$remote_pwd/$filename'!\n>;
       next;
     }
 
@@ -708,7 +747,8 @@ sub _rdelete {
     $ftp->cdup;
 
     ##now delete the directory we just came out of
-    $ftp->rmdir($file->filename());
+    $ftp->rmdir($file->filename()) 
+      or $success .= qq<Could not delete remote directory '$remote_pwd/$filename'!\n>;
   }
 
 }
@@ -753,19 +793,19 @@ sub parse_files {
     next if $fields[6] =~ /^\.{1,2}$/;
 
     if ($perms =~/^-/){
-      $file = new Net::FTP::Recursive::File(IsPlainFile => 1,
+      $file = Net::FTP::Recursive::File->new(IsPlainFile => 1,
 					    IsDirectory => 0,
 					    IsSymlink   => 0,
 					    OriginalLine => $line,
 					    Fields => [@fields]);
     } elsif ($perms =~ /^d/) {
-      $file = new Net::FTP::Recursive::File(IsDirectory => 1,
+      $file = Net::FTP::Recursive::File->new(IsDirectory => 1,
 					    IsPlainFile => 0,
 					    IsSymlink   => 0,
 					    OriginalLine => $line,
 					    Fields => [@fields]);
     } elsif ($perms =~/^l/) {
-      $file = new Net::FTP::Recursive::File(IsSymlink => 1,
+      $file = Net::FTP::Recursive::File->new(IsSymlink => 1,
 					    IsDirectory => 0,
 					    IsPlainFile => 0,
 					    OriginalLine => $line,
@@ -998,6 +1038,12 @@ pair where the value is true (ie, KeepFirstLine => 1).
 When the C<Debug> flag is used with the C<Net::FTP> object, the
 C<Recursive> package will print some messages to C<STDERR>.
 
+All of the methods should return false ('') if they are
+successful, and a true value if unsuccessful.  The true
+value will be a string of the concatenations of all of the
+error messages (with newlines).  Note that this might be the
+opposite of the more intuitive return code.
+
 =head1 CONSTRUCTOR
 
 =over
@@ -1176,7 +1222,7 @@ loop.
 
 The recursive ls method call.  This will recursively
 retrieve directory contents from the server in a
-breadth-firth fashion.  This is equivalent to calling
+breadth-first fashion.  This is equivalent to calling
 C<$ftp->rdir( Filehandle => $fh, FilenameOnly => 1 )>.
 
 =item rdelete ( [ ParseSub => \&yoursub ] )

@@ -21,11 +21,13 @@ $ftp = Net::FTP::Recursive->new($host, Debug => 1);
 $ftp->login($username, $passwd) or die "Could not log in!";
 $ftp->binary();
 
-$ftp->cwd($remote_path);
+$ftp->cwd($remote_path) or die "could not change to $remote_path on the ftp server!";
 
-$ftp->rget( map{($_, 1)} @ARGV);
+$output = $ftp->rget( map{($_, 1)} @ARGV);
 
 $ftp->quit;
+
+print "Got \$output of:\n$output\n";
 
 sub usage {
   my($name) = $0;
