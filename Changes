@@ -85,3 +85,7 @@ Revision history for Perl extension Net::FTP::Recursive.
 
     -Fixed the bug whereby files that evaluated to false would not be
      transmitted correctly.
+
+2.04
+
+    -Fixed the division bug for some of the error messages.

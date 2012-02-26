@@ -9,7 +9,7 @@ use vars qw/@ISA $VERSION/;
 use vars qw/%options %filesSeen %dirsSeen %linkMap $success/;
 
 @ISA = qw|Net::FTP|;
-$VERSION = '2.03';
+$VERSION = '2.04';
 
 sub new {
     my $class = shift;
@@ -589,7 +589,7 @@ sub _rput {
                   if $ftp->debug;
 
                 $success .= q{Could not make remote directory '}
-                          . $remote_pwd/$filename
+                         .  qq{$remote_pwd/$filename}
                           . qq{!\n};
             }
 
@@ -599,7 +599,8 @@ sub _rput {
                   if $ftp->debug;
 
                 $success .= qq{Could not change remote directory to '}
-                          . $remote_pwd/$filename . qq{'!\n};
+                          . qq{$remote_pwd/$filename}
+                          . qq{'!\n};
                 next;
             }
         }
@@ -856,7 +857,7 @@ sub _rdelete {
         ##now delete the directory we just came out of
         $ftp->rmdir($file->filename())
           or $success .= 'Could not delete remote directory "'
-                       . $remote_pwd/$filename
+                       . qq{$remote_pwd/$filename}
                        . qq{"!\n};
     }
 }
