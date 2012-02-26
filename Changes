@@ -4,3 +4,31 @@ Revision history for Perl extension Net::FTP::Recursive.
 	- original version; created by h2xs 1.22 with options
 		-X -v 1.0 -n Net::FTP::Recursive
 
+1.1  Added rdir and rls methods.
+
+1.4 Added code to handle symlinks a little better.
+
+1.5  -Fixed bug that caused an infinite loop when a directory was unreachable.
+     -Added rdelete method.
+     -Added RemoveRemoteFiles and RemoveLocalFiles options.
+     
+1.6 
+    -Fixed problems on some platforms where empty directories would
+     cause problems.  Specifically, an undef would get passed around
+     and cause havoc when methods were called on them.  Seen only on
+     Windows platforms, as far as I know.
+    -Fixed a bug with symlinks, where a symlink referring to a directory
+     would not take you back to the original directory when doing a 
+     cdup.  Now it manually retrieves the path first and cwd's back
+     to that dir.
+    -Added code to test for cycles and to be smart and make symlinks
+     wherever possible.  This is only used when the SymlinkFollow option
+     to rget is used.  It obviously will not be fully functional under
+     Windows (no symlinks), but the cycle elimination should work.
+    -Added options for allowing for the matching or omission
+     of certain filenames.
+    -Added code to make sure that files accessed through a
+     symlink will not be deleted if RemoveRemoteFiles is
+     set.  If the files will be deleted elsewhere in the
+     tree via a directory, then they will obviously still be
+     deleted.

@@ -6,15 +6,12 @@ use Net::FTP::Recursive;
 # will assume just a few args, as well as validity.
 ####################################################################
 
-usage() unless @ARGV >= 5;
+usage() unless @ARGV >= 4;
 
 $host = shift;
 $username = shift;
 $passwd = shift;
-$remote_path = shift; #where to grab from
-$local_path = shift; #where to put dir structure on local box.
-
-chdir $local_path or die "could not change dir to $local_path!";
+$remote_path = shift; #where to delete
 
 $ftp = Net::FTP::Recursive->new($host, Debug => 1);
 
@@ -23,7 +20,7 @@ $ftp->binary();
 
 $ftp->cwd($remote_path);
 
-$ftp->rget( map{($_, 1)} @ARGV);
+$ftp->rdelete( map{($_, 1)} @ARGV);
 
 $ftp->quit;
 
@@ -31,6 +28,6 @@ sub usage {
   my($name) = $0;
   $name =~ s#.*/##;
 
-  print STDERR "Usage: $name <host> <username> <passwd> <remote_path> <local_path>\n";
+  print STDERR "Usage: $name <host> <username> <passwd> <remote_path> [options]\n";
   exit;
 }

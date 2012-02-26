@@ -7,7 +7,7 @@ use Net::FTP::Recursive;
 #later.  For now, will assume just a few args, as well as validity.
 ####################################################################
 
-usage() unless @ARGV == 5;
+usage() unless @ARGV >= 5;
 
 $host = shift;
 $username = shift;
@@ -24,7 +24,7 @@ $ftp->binary();
 
 $ftp->cwd($remote_path);
 
-$ftp->rput( SymlinkCopy => 1, FlattenTree => 1 );
+$ftp->rput( map {($_, 1)} @ARGV );
 
 $ftp->quit;
 

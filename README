@@ -1,4 +1,4 @@
-Net/FTP/Recursive version 1.4
+Net/FTP/Recursive version 1.6
 =============================
 
 This module augments the list of Net::FTP methods with several
@@ -10,6 +10,7 @@ The methods are:
      rdir - Receive an entire directory tree listing.
      rls  - Receive an entire directory tree listing, filenames
             only.
+     rdelete - Remove an entire directory tree.
 
 There are several sample scripts that illustrate some of the
 possible usages of these methods.  Please see the "samples"
