@@ -15,16 +15,17 @@ our $dir_type = 2;
 our $link_type = 3;
 
 our %options;
+our %filesSeen;
 
 #------------------------------------------------------------------
 # - cd to directory, lcd to directory
-# - look at each file, determine if it should be d/l'ed
-#     - if so, download files, put timestamp into hash
+# - grab all files, process symlinks according to options
 #
-# - foreach directory, look up in hash to see if it is in there
-#    - if not, create it
-#    - in either case, call function recursively.
-#    - cd .., lcd ..
+# - foreach directory
+#    - create it unless options say to flatten
+#    - call function recursively.
+#    - cd .. unless options say to flatten
+#    - lcd ..
 #
 # -----------------------------------------------------------------
 
@@ -36,13 +37,19 @@ sub rget{
 	      @_
 	     );    #setup the options
 
+  %filesSeen = ();
+
   $ftp->_rget(); #do the real work here
+
+  %filesSeen = ();
 
 }
 
 sub _rget {
 
-  my($ftp) = @_;
+  my($ftp) = shift;
+
+  my @dirs;
 
   my(@files) = $options{ParseSub}->($ftp->dir);
 
@@ -52,37 +59,23 @@ sub _rget {
 
     #if it's not a directory we just need to get the file.
     if ( $file->isPlainFile() ) {
-      print STDERR "Retrieving " . $file->filename() . "\n" if $ftp->debug;
-      $ftp->get( $file->filename() );
+      my $filename = $file->filename();
+
+      if ( $options{FlattenTree} and $filesSeen{$filename} ) {
+	print STDERR "Retrieving $filename as $filename.$filesSeen{$filename}.\n" if $ftp->debug;
+	$ftp->get( $filename, "$filename.$filesSeen{$filename}" );
+      } else {
+	print STDERR "Retrieving $filename.\n" if $ftp->debug;
+	$ftp->get( $filename );
+      }
+
+      $filesSeen{$filename}++ if $options{FlattenTree};
+
     }
 
     #otherwise, if it's a directory, we have more work to do.
-    #this will do depth-first retrieval
     elsif ( $file->isDirectory() ) {
-
-      print STDERR "Making dir: " . $file->filename() . "\n" if $ftp->debug;
-
-      unless ( $options{FlattenTree} ) {
-	mkdir $file->filename(), "0755"; #mkdir, ignore errors due to
-                                         #pre-existence
-
-	chmod 0755, $file->filename();   # just in case the UMASK in the
-                                         # mkdir doesn't work
-	chdir $file->filename() or
-	  croak('Could not change to the local directory ' . $file->filename() . '!');
-      }
-
-      $ftp->cwd( $file->filename() );
-
-      #need to recurse
-      print STDERR 'Calling rftp in ', $ftp->pwd, "on ", $file->filename(), "\n" if $ftp->debug;
-      $ftp->_rget( );
-
-      #once we've recursed, we'll go back up a dir.
-      print STDERR "Returned from rftp in " . $ftp->pwd . ".\n" if $ftp->debug;
-      $ftp->cdup;
-      chdir ".." unless $options{FlattenTree};
-
+      push @dirs, $file;
     }
 
     elsif ( $file->isSymlink() ) {
@@ -100,6 +93,34 @@ sub _rget {
 
   }
 
+  #this will do depth-first retrieval
+  foreach my $file (@dirs) {
+
+    unless ( $options{FlattenTree} ) {
+      print STDERR "Making dir: " . $file->filename() . "\n" if $ftp->debug;
+
+      mkdir $file->filename(), "0755"; #mkdir, ignore errors due to
+                                       #pre-existence
+
+      chmod 0755, $file->filename();   # just in case the UMASK in the
+                                         # mkdir doesn't work
+      chdir $file->filename() or
+	croak('Could not change to the local directory ' . $file->filename() . '!');
+    }
+
+    $ftp->cwd( $file->filename() );
+
+    #need to recurse
+    print STDERR 'Calling rftp in ', $ftp->pwd, "on ", $file->filename(), "\n" if $ftp->debug;
+    $ftp->_rget( );
+
+    #once we've recursed, we'll go back up a dir.
+    print STDERR "Returned from rftp in " . $ftp->pwd . ".\n" if $ftp->debug;
+    $ftp->cdup;
+    chdir ".." unless $options{FlattenTree};
+
+  }
+
 }
 
 sub rput{
@@ -111,8 +132,11 @@ sub rput{
 	      @_
 	     );    #setup the options
 
+  %filesSeen = ();
+
   $ftp->_rput(); #do the real work here
 
+  %filesSeen = ();
 }
 
 #------------------------------------------------------------------
@@ -126,7 +150,7 @@ sub _rput {
 
   my($ftp) = @_;
 
-  my(@ls);
+  my(@ls, @dirs);
 
   @ls = qx[$options{DirCommand}];
 
@@ -141,40 +165,27 @@ sub _rput {
     #if it's a file we just need to put the file
 
     if ( $file->isPlainFile() ) {
-      print STDERR "Sending ", $file->filename(), ".\n" if $ftp->debug;
-      $ftp->put( $file->filename() );
+      my $filename = $file->filename(); #we're gonna need it a lot here
+
+      #we're going to check for filename conflicts here if
+      #the user has opted to flatten out the tree
+      if ( $options{FlattenTree} and $filesSeen{$filename} ) {
+	print STDERR "Sending $filename as $filename.$filesSeen{$filename}.\n" if $ftp->debug;
+	$ftp->put( $filename, "$filename.$filesSeen{$filename}");
+      } else {
+	print STDERR "Sending $filename.\n" if $ftp->debug;
+	$ftp->put( $filename );
+      }
+
+      $filesSeen{$filename}++ if $options{FlattenTree};
+
     }
 
     #otherwise, if it's a directory, we have to create the directory
     #on the remote machine, cd to it, then recurse
 
     elsif ( $file->isDirectory() ) {
-
-      print STDERR "Making dir: ", $file->filename(), "\n" if $ftp->debug;
-
-      unless ( $options{FlattenTree} ) {
-	$ftp->mkdir( $file->filename() ) or
-	  croak ('Could not make remote directory ' . $ftp->pwd
-		 . '/' . $file->filename() . '!');
-
-	$ftp->cwd( $file->filename() );
-      }
-
-
-      chdir $file->filename() or
-	croak ("Could not change to the local directory "
-	       . $file->filename . "!");
-
-      print STDERR "Calling rput in ", $ftp->pwd, "\n" if $ftp->debug;
-      $ftp->_rput( );
-
-      #once we've recursed, we'll go back up a dir.
-      print STDERR "Returned from rftp in ",
-	           $file->filename(), ".\n" if $ftp->debug;
-
-      $ftp->cdup unless $options{FlattenTree};
-      chdir "..";
-
+      push @dirs, $file;
     }
 
     #if it's a symlink, there's nothing we can do with it.
@@ -191,6 +202,109 @@ sub _rput {
 
   }
 
+
+  foreach my $file (@dirs) {
+
+    unless ( $options{FlattenTree} ) {
+      print STDERR "Making dir: ", $file->filename(), "\n" if $ftp->debug;
+
+      $ftp->mkdir( $file->filename() ) or
+	croak ('Could not make remote directory ' . $ftp->pwd
+	       . '/' . $file->filename() . '!');
+
+      $ftp->cwd( $file->filename() );
+    }
+
+
+    chdir $file->filename() or
+      croak ("Could not change to the local directory "
+	     . $file->filename() . "!");
+
+    print STDERR "Calling rput in ", $ftp->pwd, "\n" if $ftp->debug;
+    $ftp->_rput( );
+
+    #once we've recursed, we'll go back up a dir.
+    print STDERR "Returned from rftp in ",
+      $file->filename(), ".\n" if $ftp->debug;
+
+    $ftp->cdup unless $options{FlattenTree};
+    chdir "..";
+
+  }
+
+}
+
+
+sub rdir{
+
+  my($ftp) = shift;
+
+  %options = (ParseSub => \&parse_files,
+	      OutputFormat => '%p %lc %u %g %s %d %f %l',
+	      @_
+	     );    #setup the options
+
+  return unless $options{Filehandle};
+
+  $ftp->_rdir;
+
+}
+
+sub _rdir{
+
+  my($ftp) = shift;
+
+  my $dir = $ftp->pwd;
+
+  my(@ls) = $ftp->dir;
+
+  my(@files) = $options{ParseSub}->( @ls );
+
+  print STDERR join("\n",map { $_->originalLine() } @files),"\n" if $ftp->debug;
+
+  my(@dirs);
+  my $fh = $options{Filehandle};
+  print $fh $ftp->pwd, ":\n" unless $options{FilenameOnly};
+
+  foreach my $file (@files) {
+
+    #if it's a directory, we need to save the name for later
+
+    if ( $file->isDirectory() ) {
+        push @dirs, $file->filename();
+    }
+
+    if( $options{FilenameOnly} ){
+	print $fh $dir, '/', $file->filename(),"\n";
+    } else {
+	print $fh $file->originalLine(), "\n";
+    }
+
+  }
+
+  @files = undef; #mark this for cleanup, it might matter
+                  #(save memory) since we're recursing
+
+  print $fh "\n" unless $options{FilenameOnly};
+
+
+  foreach my $dir (@dirs){
+
+    $ftp->cwd( $dir );
+
+    print STDERR "Calling rdir in ", $ftp->pwd, "\n" if $ftp->debug;
+    $ftp->_rdir( );
+
+    #once we've recursed, we'll go back up a dir.
+    print STDERR "Returned from rdir in " . $dir . ".\n" if $ftp->debug;
+    $ftp->cdup;
+  }
+
+}
+
+sub rls{
+  my $ftp = shift;
+  $ftp->rdir(@_, FilenameOnly => 1);
 }
 
 #-------------------------------------------------------------------#
@@ -249,77 +363,6 @@ sub parse_files {
 
   return(@to_return);
 
-}
-
-sub rdir{
-
-  my($ftp) = shift;
-
-  %options = (ParseSub => \&parse_files,
-	      OutputFormat => '%p %lc %u %g %s %d %f %l',
-	      @_
-	     );    #setup the options
-
-  return unless $options{Filehandle};
-
-  $ftp->_rdir;
-
-}
-
-sub _rdir{
-
-  my($ftp) = shift;
-
-  my $dir = $ftp->pwd;
-
-  my(@ls) = $ftp->dir;
-
-  my(@files) = $options{ParseSub}->( @ls );
-
-  print STDERR join("\n",map { $_->originalLine() } @files),"\n" if $ftp->debug;
-
-  my(@dirs);
-  my $fh = $options{Filehandle};
-  print $fh $ftp->pwd, ":\n" unless $options{FilenameOnly};
-
-  foreach my $file (@files) {
-
-    #if it's a directory, we need to save the name for later
-
-    if ( $file->isDirectory() ) {
-        push @dirs, $file->filename();
-    }
-
-    if( $options{FilenameOnly} ){
-	print $fh $dir, '/', $file->filename(),"\n";
-    } else {
-	print $fh $file->originalLine(), "\n";
-    }
-
-  }
-
-  @files = undef; #mark this for cleanup, it might matter since we're recursing
-
-  print $fh "\n" unless $options{FilenameOnly};
-
-
-  foreach my $dir (@dirs){
-
-    $ftp->cwd( $dir );
-
-    print STDERR "Calling rdir in ", $ftp->pwd, "\n" if $ftp->debug;
-    $ftp->_rdir( );
-
-    #once we've recursed, we'll go back up a dir.
-    print STDERR "Returned from rdir in " . $dir . ".\n" if $ftp->debug;
-    $ftp->cdup;
-  }
-
-}
-
-sub rls{
-  my $ftp = shift;
-  $ftp->rdir(@_, FilenameOnly => 1);
 }
 
 package Net::FTP::Recursive::File;
@@ -442,7 +485,10 @@ the rget call (ie, $ftp->rget(SymlinkIgnore => 1)):
 
 The C<FlattenTree> optional argument will retrieve all of
 the files from the remote directory structure and place them
-in the current local directory.
+in the current local directory.  This option will resolve
+filename conflicts by retrieving files with the same name
+and renaming them in a "$filename.$i" fashion, where $i is
+the number of times it has retrieved a file with that name.
 
 
 =item rput ( [ParseSub => \&yoursub] [DirCommand => $cmd] [FlattenTree => 1])
@@ -471,9 +517,12 @@ the rput call (ie, $ftp->rput(SymlinkIgnore => 1)):
 
 =back
 
-The C<FlattenTree> optional argument will send all of
-the files from the local directory structure and place them
-in the current remote directory.
+The C<FlattenTree> optional argument will send all of the
+files from the local directory structure and place them in
+the current remote directory.  This option will resolve
+filename conflicts by sending files with the same name
+and renaming them in a "$filename.$i" fashion, where $i is
+the number of times it has retrieved a file with that name.
 
 =item rdir ( Filehandle => $fh [, FilenameOnly => 1 ] [, ParseSub => \&yoursub ] )
 
