@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 
 use Net::FTP::Recursive;
+use FileHandle;
 
 ####################################################################
 # will assume just a few args, as well as validity.
@@ -12,9 +13,10 @@ $host = shift;
 $username = shift;
 $passwd = shift;
 $remote_path = shift; #where to grab from
-$local_path = shift; #where to put dir structure on local box.
+$filename = shift;
 
-chdir $local_path or die "could not change dir to $local_path!";
+$fh = new FileHandle;
+$fh->open(">$filename");
 
 $ftp = Net::FTP::Recursive->new($host, Debug => 1);
 
@@ -23,7 +25,9 @@ $ftp->binary();
 
 $ftp->cwd($remote_path);
 
-$ftp->rget( SymlinkLink => 1 );
+$ftp->rdir( Filehandle => $fh );
+
+$fh->close;
 
 $ftp->quit;
 
@@ -31,6 +35,6 @@ sub usage {
   my($name) = $0;
   $name =~ s/.*\///;
 
-  print STDERR "Usage: $name <host> <username> <passwd> <remote_path> <local_path>\n";
+  print STDERR "Usage: $name <host> <username> <passwd> <remote_path> <output_file>\n";
   exit;
 }

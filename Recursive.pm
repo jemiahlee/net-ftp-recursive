@@ -1,10 +1,11 @@
 package Net::FTP::Recursive;
 
 use Net::FTP;
+use Carp;
 use strict;
 
 our @ISA = qw|Net::FTP|;
-our $VERSION = '1.0';
+our $VERSION = '1.1';
 
 ###################################################################
 # Constants for the different file types
@@ -31,7 +32,9 @@ sub rget{
 
   my($ftp) = shift;
 
-  %options = @_; #setup the options
+  %options = (ParseSub => \&parse_files,
+	      @_
+	     );    #setup the options
 
   $ftp->_rget(); #do the real work here
 
@@ -41,39 +44,37 @@ sub _rget {
 
   my($ftp) = @_;
 
-  my(@lines) = parse_files($ftp->dir);
+  my(@files) = $options{ParseSub}->($ftp->dir);
 
-  print STDERR join("\n",map {join " ", keys %$_ } @lines),"\n" if $ftp->debug;
+  print STDERR join("\n",map { $_->originalLine() } @files),"\n" if $ftp->debug;
 
-  foreach my $entry (@lines){
+  foreach my $file (@files){
 
     #if it's not a directory we just need to get the file.
-    if ( $entry->{type} == $file_type ) {
-      print STDERR "Retrieving $entry->{filename}\n" if $ftp->debug;
-      $ftp->get($entry->{filename});
-
+    if ( $file->isPlainFile() ) {
+      print STDERR "Retrieving " . $file->filename() . "\n" if $ftp->debug;
+      $ftp->get( $file->filename() );
     }
 
     #otherwise, if it's a directory, we have more work to do.
     #this will do depth-first retrieval
-    elsif ($entry->{type} == $dir_type) {
+    elsif ( $file->isDirectory() ) {
 
-      print STDERR "Making dir: $entry->{filename}\n" if $ftp->debug;
+      print STDERR "Making dir: " . $file->filename() . "\n" if $ftp->debug;
 
-      mkdir $entry->{filename},"0755" and #mkdir, ignore errors due to
+      mkdir $file->filename(), "0755" and #mkdir, ignore errors due to
 	                           #pre-existence
 
-      chmod 0755, $entry->{filename}; # just in case the UMASK in the
-                               # mkdir doesn't work
+      chmod 0755, $file->filename(); # just in case the UMASK in the
+                                     # mkdir doesn't work
 
-      chdir $entry->{filename} or
-	die('Could not change to the local directory '
-	     . $entry->{filename} . '!');
+      chdir $file->filename() or
+	croak('Could not change to the local directory ' . $file->filename() . '!');
 
-      $ftp->cwd($entry->{filename});
+      $ftp->cwd( $file->filename() );
 
       #need to recurse
-      print STDERR 'Calling rftp in ' . $ftp->pwd . "on $entry->{filename}\n" if $ftp->debug;
+      print STDERR 'Calling rftp in ', $ftp->pwd, "on ", $file->filename(), "\n" if $ftp->debug;
       $ftp->_rget( );
 
       #once we've recursed, we'll go back up a dir.
@@ -83,16 +84,15 @@ sub _rget {
 
     }
 
-    elsif ($entry->{type} == $link_type) {
+    elsif ( $file->isSymlink() ) {
 
-      if (not %options or $options{symlink_ignore}) {
-	print STDERR "Ignoring the symlink $entry->{filename}.\n" 
-	  if $ftp->debug;
-      } elsif ( $options{symlink_copy} ) {
-	$ftp->get($entry->{link_target});
-      } elsif ( $options{symlink_link}) {
+      if ( $options{SymlinkIgnore} ) {
+	print STDERR "Ignoring the symlink ", $file->filename(), ".\n" if $ftp->debug;
+      } elsif ( $options{SymlinkCopy} ) {
+	$ftp->get( $file->linkName() );
+      } elsif ( $options{SymlinkLink}) {
 	#we need to make the symlink and that's it.
-	symlink $entry->{link_target}, $entry->{filename};
+	symlink $file->linkName(), $file->filename();
       }
 
     }
@@ -105,7 +105,10 @@ sub rput{
 
   my($ftp) = shift;
 
-  %options = @_; #setup the options
+  %options = (DirCommand => 'ls -la',
+	      ParseSub => \&parse_files,
+	      @_
+	     );    #setup the options
 
   $ftp->_rput(); #do the real work here
 
@@ -122,45 +125,49 @@ sub _rput {
 
   my($ftp) = @_;
 
-  my(@ls) = `ls -la`;
+  my(@ls);
+
+  @ls = qx[$options{DirCommand}];
+
   chomp(@ls);
 
-  my(@lines) = parse_files( @ls );
+  my @files = $options{ParseSub}->(@ls);
 
-  print STDERR join("\n",map { join " ", keys %$_ } @lines),"\n" if $ftp->debug;
+  print STDERR join("\n", map { $_->originalLine() } @files),"\n" if $ftp->debug;
 
-  foreach my $entry (@lines){
+  foreach my $file (@files){
 
     #if it's a file we just need to put the file
 
-    if ( $entry->{type} == $file_type ) {
-
-      print STDERR "Sending $entry->{filename}.\n" if $ftp->debug;
-      $ftp->put($entry->{filename});
-
+    if ( $file->isPlainFile() ) {
+      print STDERR "Sending ", $file->filename(), ".\n" if $ftp->debug;
+      $ftp->put( $file->filename() );
     }
 
     #otherwise, if it's a directory, we have to create the directory
     #on the remote machine, cd to it, then recurse
 
-    elsif ($entry->{type} == $dir_type) {
+    elsif ( $file->isDirectory() ) {
 
-      print STDERR "Making dir: $entry->{filename}\n" if $ftp->debug;
+      print STDERR "Making dir: ", $file->filename(), "\n" if $ftp->debug;
 
-      $ftp->mkdir($entry->{filename}) or 
-	die ('Could not make remote directory ' . $ftp->pwd 
-	      . '/' . $entry->{filename} . '!');
+      $ftp->mkdir( $file->filename() ) or
+	croak ('Could not make remote directory ' . $ftp->pwd
+	      . '/' . $file->filename() . '!');
 
-      $ftp->cwd($entry->{filename});
+      $ftp->cwd( $file->filename() );
 
-      chdir $entry->{filename} or 
-	die ("Could not change to the local directory $entry->{filename}!");
+      chdir $file->filename() or
+	croak ("Could not change to the local directory "
+	       . $file->filename . "!");
 
       print STDERR "Calling rput in ", $ftp->pwd, "\n" if $ftp->debug;
       $ftp->_rput( );
 
       #once we've recursed, we'll go back up a dir.
-      print STDERR "Returned from rftp in $entry->{filename}.\n" if $ftp->debug;
+      print STDERR "Returned from rftp in ",
+	           $file->filename(), ".\n" if $ftp->debug;
+
       $ftp->cdup;
       chdir "..";
 
@@ -168,12 +175,12 @@ sub _rput {
 
     #if it's a symlink, there's nothing we can do with it.
 
-    elsif ($entry->{type} == $link_type) {
+    elsif ( $file->isSymlink() ) {
 
-      if ( $options{symlink_ignore} ) {
-	print STDERR "Not doing anything to $entry->{filename} as it is a link.\n" if $ftp->debug;
-      } elsif ( $options{symlink_copy} ) {
-	$ftp->put($entry->{link_target});
+      if ( $options{SymlinkIgnore} ) {
+	print STDERR "Not doing anything to ", $file->filename(), " as it is a link.\n" if $ftp->debug;
+      } elsif ( $options{SymlinkCopy} ) {
+	$ftp->put( $file->linkName() );
       }
 
     }
@@ -200,34 +207,155 @@ sub parse_files {
 
   foreach my $line (@_) {
 
-    next unless $line =~ /^[-dl]/;
+    my($file); #reinitialize var
 
-    my($linkname, $type); #reinitialize vars
+    my @fields = $line =~ /^
+                            (\S+)\s+ #permissions %p
+                            (\d+)\s+ #link count %lc
+                            (\w+)\s+ #user owner %u
+                            (\w+)\s+ #group owner %g
+                            (\d+)\s+ #size %s
+                            (\w+\s+\w+\s+\S+)\s+ #last modification date %d
+                            (.+?)\s* #filename %f
+                            (?:->\s*(.+))? #optional link part %l
+                           $
+                          /x;
 
-    my($perms,$filename) = (split(/\s+/, $line,9))[0,8];
+    my($perms) = ($1);
 
-    next if $filename =~ /^\.{1,2}$/;
+    next if $fields[6] =~ /^\.{1,2}$/;
 
     if ($perms =~/^-/){
-      $type = $file_type;
+      $file = new Net::FTP::Recursive::File(IsPlainFile => 1,
+					    OriginalLine => $line,
+					    Fields => [@fields]);
     } elsif ($perms =~ /^d/) {
-      $type = $dir_type;
+      $file = new Net::FTP::Recursive::File(IsDirectory => 1,
+					    OriginalLine => $line,
+					    Fields => [@fields]);
     } elsif ($perms =~/^l/) {
-      $type = $link_type;
-      ($filename,$linkname) = $filename =~ m#(.*?)\s*->\s*(.*)$#;
+      $file = new Net::FTP::Recursive::File(IsSymlink => 1,
+					    OriginalLine => $line,
+					    Fields => [@fields]);
     }
 
-    push(@to_return, {
-		      filename => $filename,
-		      type => $type,
-		      link_target => $linkname
-		     }
-	);
+    push(@to_return, $file);
 
   }
 
   return(@to_return);
 
+}
+
+sub rdir{
+
+  my($ftp) = shift;
+
+  %options = (ParseSub => \&parse_files,
+	      OutputFormat => '%p %lc %u %g %s %d %f %l',
+	      @_
+	     );    #setup the options
+
+  return unless $options{Filehandle};
+
+  $ftp->_rdir;
+
+}
+
+sub _rdir{
+
+  my($ftp) = shift;
+
+  my $dir = $ftp->pwd;
+
+  my(@ls) = $ftp->dir;
+
+  my(@files) = $options{ParseSub}->( @ls );
+
+  print STDERR join("\n",map { $_->originalLine() } @files),"\n" if $ftp->debug;
+
+  my(@dirs);
+  my $fh = $options{Filehandle};
+  print $fh $ftp->pwd, ":\n" unless $options{FilenameOnly};
+
+  foreach my $file (@files) {
+
+    #if it's a directory, we need to save the name for later
+
+    if ( $file->isDirectory() ) {
+        push @dirs, $file->filename();
+    }
+
+    if( $options{FilenameOnly} ){
+	print $fh $dir, '/', $file->filename(),"\n";
+    } else {
+	print $fh $file->originalLine(), "\n";
+    }
+
+  }
+
+  @files = undef; #mark this for cleanup, it might matter since we're recursing
+
+  print $fh "\n" unless $options{FilenameOnly};
+
+
+  foreach my $dir (@dirs){
+
+    $ftp->cwd( $dir );
+
+    print STDERR "Calling rdir in ", $ftp->pwd, "\n" if $ftp->debug;
+    $ftp->_rdir( );
+
+    #once we've recursed, we'll go back up a dir.
+    print STDERR "Returned from rdir in " . $dir . ".\n" if $ftp->debug;
+    $ftp->cdup;
+  }
+
+}
+
+sub rls{
+  my $ftp = shift;
+  $ftp->rdir(@_, FilenameOnly => 1);
+}
+
+package Net::FTP::Recursive::File;
+
+our @ISA = ();
+
+sub new{
+
+  my $pkg = shift;
+
+  my $self = bless {@_}, $pkg;
+
+}
+
+sub originalLine{
+  return $_[0]->{OriginalLine};
+}
+
+sub filename{
+  return $_[0]->{Fields}[6];
+}
+
+sub linkName{
+  return $_[0]->{Fields}[7];
+}
+
+sub isSymlink{
+  return $_[0]->{IsSymlink};
+}
+
+sub isDirectory{
+  return $_[0]->{IsDirectory};
+}
+
+sub isPlainFile{
+  return $_[0]->{IsPlainFile};
+}
+
+sub fields{
+  return $_[0]->{Fields};
 }
 
 1;
@@ -245,7 +373,7 @@ Net::FTP::Recursive - Recursive FTP Client class
     $ftp = New::FTP::Recursive->new("some.host.name", Debug => 0);
     $ftp->login("anonymous",'me@here.there');
     $ftp->cwd('/pub');
-    $ftp->rget();
+    $ftp->rget( ParseSub => \&yoursub );
     $ftp->quit;
 
 =head1 DESCRIPTION
@@ -254,10 +382,16 @@ C<Net::FTP::Recursive> is a class built on top of the Net::FTP package
 that implements recursive get and put methods for the retrieval and
 sending of entire directory structures.
 
-This module will work only when the remote ftp server and
-the local client understand the "ls" command and return
-UNIX-style directory listings.  It is planned that in the
-future, this will be a configurable part of the module.
+This module's default behavior is such that the remote ftp
+server should understand the "dir" command and return
+UNIX-style directory listings.  If you'd like to provide
+your own function for parsing the data retrieved from this
+command (in case the ftp server does not understand the
+"dir" command), all you need do is provide a function to one
+of the Recursive method calls.  This function will take the
+output from the "dir" command (as a list of lines) and
+should return a list of Net::FTP::Recursive::File objects.
+This module is described below.
 
 When the C<Debug> flag is used with the C<Net::FTP> object, the
 C<Recursive> package will print some messages to C<STDERR>.
@@ -279,47 +413,152 @@ more information.
 
 =over 4
 
-=item rget ( )
 
-The recursive get function call.  This will recursively retrieve the
-ftp object's current working directory and its contents into the local
-current working directory.
+=item rget ( [ParseSub =>\&yoursub] )
 
-This will take an optional argument that will control what
+The recursive get method call.  This will recursively
+retrieve the ftp object's current working directory and its
+contents into the local current working directory.
+
+This will also take an optional argument that will control what
 happens when a symbolic link is encountered on the ftp
 server.  The default is to ignore the symlink, but you can
 control the behavior by passing one of these arguments to
-the rget call (ie, $ftp->rget(symlink_ignore => 1)):
+the rget call (ie, $ftp->rget(SymlinkIgnore => 1)):
 
 =over 12
 
-=item symlink_ignore - disregards symlinks
+=item SymlinkIgnore - disregards symlinks
 
-=item symlink_copy - copies the link target from the server to the client (if accessible)
+=item SymlinkCopy - copies the link target from the server to the client (if accessible)
 
-=item symlink_link - creates the link on the client.
+=item SymlinkLink - creates the link on the client.
 
 =back
 
-=item rput ( )
 
-The recursive put function call.  This will recursively send the local
+
+=item rput ( [ParseSub => \&yoursub] [DirCommand => $cmd])
+
+The recursive put method call.  This will recursively send the local
 current working directory and its contents to the ftp object's current
 working directory.
 
+This method will take an optional set of arguments to tell
+it what the local directory listing command will be.  By
+default, this is "ls -al".  If you change the behavior
+through this argument, you probably also need to provide a
+ParseSub, as described above.
+
 This will take an optional argument that will control what
 happens when a symbolic link is encountered on the ftp
 server.  The default is to ignore the symlink, but you can
 control the behavior by passing one of these arguments to
-the rput call (ie, $ftp->rput(symlink_ignore => 1)):
+the rput call (ie, $ftp->rput(SymlinkIgnore => 1)):
 
 =over 12
 
-=item symlink_ignore - disregards symlinks
+=item SymlinkIgnore - disregards symlinks
 
-=item symlink_copy - will copy the link target from the client to the server.
+=item SymlinkCopy - will copy the link target from the client to the server.
 
 =back
+
+=back
+
+
+
+=item rdir ( Filehandle => $fh [, FilenameOnly => 1 ] [, ParseSub => \&yoursub ] )
+
+The recursive dir method call.  This will recursively retrieve
+directory contents from the server in a breadth-first fashion.
+
+The method needs to be passed a filehandle to print to.  The method
+call just does a C<print $fh>, so as long as this call can succeed
+with whatever you pass to this function, it'll work.
+
+The second, optional argument, is to retrieve only the filenames
+(including path information).  The default is to display all of the
+information returned from the $ftp-dir call.
+
+
+
+=item rls ( Filehandle => $fh [, ParseSub => \&yoursub ] )
+
+The recursive ls method call.  This will recursively
+retrieve directory contents from the server in a
+breadth-firth fashion.  This is equivalent to calling
+C<$ftp->rdir( Filehandle => $fh, FilenameOnly => 1 )>.
+
+
+
+=head1 Net::FTP::Recursive::File
+
+This is a helper class that encapsulates the data
+representing one file in a directory listing.
+
+=head1 METHODS
+
+=over 4
+
+=item new ( )
+
+This method creates the File object.  It should be passed
+several parameters.  It should always be passed:
+
+=over 16
+
+=item OriginalLine => $line
+
+=item Fields => \@fields
+
+=back
+
+And it should also be passed one (and only one) of:
+
+=over 16
+
+=item IsPlainFile => 1
+
+=item IsDirectory => 1
+
+=item IsSymlink => 1
+
+=back
+
+OriginalLine should provide the original line from the
+output of a directory listing.
+
+Fields should provide an 8 element list that supplies
+information about the file.  The fields, in order, should
+be:
+
+=over 16
+
+=item Permissions
+
+=item Link Count
+
+=item User Owner
+
+=item Group Owner
+
+=item Size
+
+=item Last Modification Date/Time
+
+=item Filename
+
+=item Link Target
+
+=back
+
+The C<IsPlainFile>, C<IsDirectory>, and C<IsSymlink> fields
+need to be supplied so that for the output on your
+particular system, your code (in the ParseSub) can determine
+which type of file it is so that the Recursive calls can
+take the appropriate action for that file.  Only one of
+these three fields should be set to a "true" value.
 
 =back
 
@@ -327,9 +566,7 @@ the rput call (ie, $ftp->rput(symlink_ignore => 1)):
 
 =over 4
 
-=item Make the "ls" command configurable
-
-=item Make the parsing of the "ls" output configurable
+=item Allow for formats to be given for output on rdir/rls.
 
 =back
 
