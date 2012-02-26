@@ -9,7 +9,7 @@ use vars qw/@ISA $VERSION/;
 use vars qw/%options %filesSeen %dirsSeen %linkMap $success/;
 
 @ISA = qw|Net::FTP|;
-$VERSION = '2.01';
+$VERSION = '2.03';
 
 sub new {
     my $class = shift;
@@ -1030,7 +1030,7 @@ sub path_resolve{
     $remote_pwd; #return the result
 }
 
-=begin blah
+=begin comment
 
   This subroutine takes two absolute paths and basically
   'links' them together.  The idea is that all of the paths
@@ -1057,7 +1057,7 @@ sub path_resolve{
   than the possible '../../dir'.  The last case will indeed
   get the '../file'.
 
-=end blah
+=end comment
 
 =cut
 
@@ -1116,7 +1116,7 @@ sub new{
                };
 
     croak 'Must set a filename when creating a File object!'
-      unless $self->{filename};
+      unless defined $self->{filename};
 
     if( $self->{'symlink'} and not $self->{linkname} ){
         croak 'Must set a linkname when creating a File object for a symlink!';
@@ -1409,6 +1409,7 @@ delete everything in the directory structure.  This
 disregards the C<SymlinkFollow> option and does not recurse
 into symlinks that refer to directories.
 
+=back
 
 =head1 Net::FTP::Recursive::File
 
@@ -1509,29 +1510,11 @@ ftp(1), ftpd(8), RFC 959
 
 =head1 CREDITS
 
-(in Chronological order, sorry if I missed anyone)
-
-- Andrew Winkler - for various input into the module.
-
-- Raj Mudaliar - documentation fix.
-
-- Brian Reischl - for rdelete code.
-
-- Chris Smith - for RemoveRemoteFiles code.
-
-- Zainul Charbiwala - bug report & code to fix.
-
-- Brian McGraw - bug report & feature request.
-
-- Isaac Koenig - bug report
-
-- Arturas Slajus - feature request and code for that feature request.
-
-And anyone else who gave me input on the module.
+Thanks to everyone who has submitted bugs over the years.
 
 =head1 COPYRIGHT
 
-Copyright (c) 2001-2005 Jeremiah Lee.
+Copyright (c) 2009 Jeremiah Lee.
 
 This program is free software; you may redistribute it and/or
 modify it under the same terms as Perl itself.

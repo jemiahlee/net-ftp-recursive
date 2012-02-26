@@ -1,5 +1,5 @@
-Net/FTP/Recursive version 2.01
-==============================
+Net/FTP/Recursive
+==================
 
 This module augments the list of Net::FTP methods with several
 methods that automatically descend directory structures for you.

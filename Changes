@@ -80,3 +80,8 @@ Revision history for Perl extension Net::FTP::Recursive.
      -rput no longer relies on an external program to determine the list
       of files to transfer.  It now uses opendir and readdir.
      -Code cleanup, everywhere.
+
+2.03
+
+    -Fixed the bug whereby files that evaluated to false would not be
+     transmitted correctly.
