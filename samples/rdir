@@ -23,14 +23,14 @@ $| = 1;
 
 select STDOUT;
 
-$ftp = Net::FTP::Recursive->new($host, Debug => 1);
+$ftp = Net::FTP::Recursive->new($host, ); #Debug => 1);
 
 $ftp->login($username, $passwd) or die "Could not log in!";
 $ftp->binary();
 
 $ftp->cwd($remote_path);
 
-$ftp->rdir( Filehandle => $fh );
+$ftp->rdir( FilenameOnly => 1, Filehandle => $fh, PrintType => 1 );
 
 $fh->close;
 
@@ -40,6 +40,6 @@ sub usage {
   my($name) = $0;
   $name =~ s/.*\///;
 
-  print STDERR "Usage: $name <host> <username> <passwd> <remote_path> <output_file>\n";
+print STDERR "Usage: $name <host> <username> <passwd> <remote_path> <output_file>\n";
   exit;
 }

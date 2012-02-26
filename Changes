@@ -67,3 +67,10 @@ Revision history for Perl extension Net::FTP::Recursive.
 1.11
      -Added "CheckSizes" option to the rput method.
 
+2.00
+
+     -Changed the version number to fix indexing on CPAN.
+      (Not sure if this is gonna work).
+     -Added carping for when the rls/rdir functions are not
+      given FileHandles.
+     -Added "PrintType" option to rls and rdir.

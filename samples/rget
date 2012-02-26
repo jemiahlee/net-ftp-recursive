@@ -36,3 +36,58 @@ sub usage {
   print STDERR "Usage: $name <host> <username> <passwd> <remote_path> <local_path> [options]\n";
   exit;
 }
+
+sub parse_sub{
+
+  #throw away the first line, it should be a "total" line
+  #  shift unless $options{KeepFirstLine};
+  # this should be unnecessary with the change I made below.
+
+  my(@to_return) = ();
+
+  foreach my $line (@_) {
+
+    my($file); #reinitialize var
+
+    next unless my @fields =
+      $line =~ /^
+                 (\S+)\s+ #date
+                 (\S+)\s+ #time
+                 (<DIR>)?\s* #user owner %u
+                 (\d+)\s+ #size %s
+                 (.+?)\s* #filename %f
+                 (?:->\s*(.+))? #optional link part %l
+                $
+               /x;
+
+    @fields = ($fields[2],undef,undef,undef,$fields[3],"$fields[0]$fields[1]",$fields[4,5]);
+
+    my($perms) = ($fields[0]);
+
+    next if $fields[6] =~ /^\.{1,2}$/;
+
+
+    if ($perms =~ /<DIR>/){
+      $file = Net::FTP::Recursive::File->new(IsPlainFile => 0,
+					    IsDirectory => 1,
+					    IsSymlink   => 0,
+					    OriginalLine => $line,
+					    Fields => [@fields]);
+    }
+    else {
+      $file = Net::FTP::Recursive::File->new(IsDirectory => 0,
+					    IsPlainFile => 1,
+					    IsSymlink   => 0,
+					    OriginalLine => $line,
+					    Fields => [@fields]);
+    }
+
+    push(@to_return, $file);
+
+  }
+
+  return(@to_return);
+
+}
+
+

@@ -1,6 +1,7 @@
 package Net::FTP::Recursive;
 
 use Net::FTP;
+use Carp;
 use Cwd 'getcwd';
 use strict;
 
@@ -8,7 +9,7 @@ use vars qw/@ISA $VERSION $file_type $dir_type $link_type/;
 use vars qw/%options %filesSeen %dirsSeen %linkMap $success/;
 
 @ISA = qw|Net::FTP|;
-$VERSION = '1.11';
+$VERSION = '2.00';
 
 ###################################################################
 # Constants for the different file types
@@ -567,7 +568,9 @@ sub rdir{
 	      InitialDir => $ftp->pwd
 	     );    #setup the options
 
-  return unless $options{Filehandle};
+  unless( $options{Filehandle} ) {
+    Carp::croak("You must pass a filehandle when using rdelete/rls!");
+  }
 
   %dirsSeen = ();
   %filesSeen = ();
@@ -640,22 +643,43 @@ sub _rdir{
 	  # to this directory
 	  push @dirs, $file;
 	  $dirsSeen{$remote_abs_path}++;
-	  print STDERR qq<Mapping '$remote_abs_path' to '$dirsSeen{$remote_abs_path}'.\n>;
+	  #print STDERR qq<Mapping '$remote_abs_path' to '$dirsSeen{$remote_abs_path}'.\n>;
 
 	}
       } #end of if( $ftp->cwd( $filename ) ){
     } #end of if( $file->isSymlink() ){
     elsif ( $file->isDirectory() ) {
         push @dirs, $file;
+
+	#since we won't get to the code below, we need this
+	#code here
+	if ( $options{FilenameOnly} && $options{PrintType} ) {
+	  print $fh $remote_pwd, '/', $filename, " d\n";
+	}
+
 	next FILE if $options{FilenameOnly};
     }
 
+
     if( $options{FilenameOnly} ){
-      print $fh $remote_pwd, '/', $filename,"\n";
+      print $fh $remote_pwd, '/', $filename;
+      if ( $options{PrintType} ) {
+        my $filetype;
+        if ( $file->isSymlink() ) {
+	  $filetype = 's';
+	} elsif ( $file->isDirectory() ) {
+	  # $filetype = 'd';
+	  # we should never get here, this
+	  # is just a sanity check
+	} else {
+	  $filetype = 'f';
+        }
+        print $fh ' ', $filetype;
+      }
+      print $fh "\n";
     } else {
       print $fh $file->originalLine(), "\n";
     }
-
   }
 
   undef @files; #mark this for cleanup, it might matter
@@ -804,8 +828,8 @@ sub parse_files {
       $line =~ /^
                  (\S+)\s+ #permissions %p
                  (\d+)\s+ #link count %lc
-                 (\w+)\s+ #user owner %u
-                 (\w+)\s+ #group owner %g
+                 (\S+)\s+ #user owner %u
+                 (\S+)\s+ #group owner %g
                  (\d+)\s+ #size %s
                  (\w+\s+\w+\s+\S+)\s+ #last modification date %d
                  (.+?)\s* #filename %f
@@ -1247,7 +1271,8 @@ directories.  This option does not affect the normal
 behavior of C<RemoveRemoteFiles> option (ie, it will try to
 delete symlinks and directories no matter what).
 
-=item rdir ( Filehandle => $fh [, FilenameOnly => 1]
+=item rdir ( Filehandle => $fh 
+             [, FilenameOnly => 1 [, PrintType => 1] ]
              [, ParseSub => \&yoursub ] )
 
 The recursive dir method call.  This will recursively retrieve
@@ -1261,16 +1286,28 @@ The second, optional argument, is to retrieve only the filenames
 (including path information).  The default is to display all of the
 information returned from the $ftp-dir call.
 
-This method WILL follow symlinks.  It has the same basic
+This method B<WILL> follow symlinks.  It has the same basic
 cycle-checking code that is in rget, so it should not infinitely
 loop.
 
-=item rls ( Filehandle => $fh [, ParseSub => \&yoursub] )
+The C<PrintType> argument will print either an 's', an 'f',
+or a 'd' after the filename when printed, to tell you what
+kind of file it thinks it is.  This argument must be given
+along with the FilenameOnly argument.  (Submitted by Arturas
+Slajus).
+
+=item rls ( Filehandle => $fh
+            [, PrintType => 1 ]
+            [, ParseSub => \&yoursub] )
 
 The recursive ls method call.  This will recursively
 retrieve directory contents from the server in a
 breadth-first fashion.  This is equivalent to calling
 C<$ftp->rdir( Filehandle => $fh, FilenameOnly => 1 )>.
+
+There is also a new argument to this, the C<PrintType>
+referenced in the rdir part of the documentation.  For rls,
+the FilenameOnly argument is automatically passed.
 
 =item rdelete ( [ ParseSub => \&yoursub ] )
 
@@ -1381,18 +1418,27 @@ ftp(1), ftpd(8), RFC 959
 
 (in Chronological order, sorry if I missed anyone)
 
-Andrew Winkler - for various input into the module.
-Raj Mudaliar - documentation fix.
-Brian Reischl - for rdelete code.
-Chris Smith - for RemoveRemoteFiles code.
-Zainul Charbiwala - bug report & code to fix.
-Brian McGraw - bug report & feature request.
-Isaac Koenig - bug report
-Anyone else who gave me input on the module.
+- Andrew Winkler - for various input into the module.
+
+- Raj Mudaliar - documentation fix.
+
+- Brian Reischl - for rdelete code.
+
+- Chris Smith - for RemoveRemoteFiles code.
+
+- Zainul Charbiwala - bug report & code to fix.
+
+- Brian McGraw - bug report & feature request.
+
+- Isaac Koenig - bug report
+
+- Arturas Slajus - feature request and code for that feature request.
+
+And anyone else who gave me input on the module.
 
 =head1 COPYRIGHT
 
-Copyright (c) 2001-2004 Jeremiah Lee.
+Copyright (c) 2001-2005 Jeremiah Lee.
 
 This program is free software; you may redistribute it and/or
 modify it under the same terms as Perl itself.
