@@ -1,4 +1,4 @@
-Net/FTP/Recursive version 1.8
+Net/FTP/Recursive version 1.9
 =============================
 
 This module augments the list of Net::FTP methods with several
@@ -36,7 +36,7 @@ module from http://cpan.org/modules/by-module/Net.
 
 COPYRIGHT AND LICENCE
 
-Copyright (C) 2003 Jeremiah Lee <texasjdl@yahoo.com>
+Copyright (C) 2003 Jeremiah Lee <texasjdl_AT_yahoo.com>
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.  Use it at your own risk,

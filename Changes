@@ -53,3 +53,9 @@ Revision history for Perl extension Net::FTP::Recursive.
      -Now using the Cwd module to get the current working directory
       on the client machine, for platform independence.
 
+1.9
+     -Fixed bug in creation of FTP object.  It will now return undef
+      if Net::FTP->new returns undef, rather than croaking.
+     -All "<variable> = undef;" lines have been changed to
+      "undef <variable>;" as the former doesn't seem to work on
+      some (every?) platform now.

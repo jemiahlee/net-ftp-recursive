@@ -8,7 +8,7 @@ use vars qw/@ISA $VERSION $file_type $dir_type $link_type/;
 use vars qw/%options %filesSeen %dirsSeen %linkMap $success/;
 
 @ISA = qw|Net::FTP|;
-$VERSION = '1.8';
+$VERSION = '1.9';
 
 ###################################################################
 # Constants for the different file types
@@ -22,10 +22,9 @@ sub new {
 
   my $ftp = new Net::FTP(@_);
 
-  bless $ftp, $class;
+  bless $ftp, $class if defined($ftp);
 
   return $ftp;
-
 }
 
 #------------------------------------------------------------------
@@ -61,8 +60,8 @@ sub rget{
 
   $ftp->_rget(); #do the real work here
 
-  %filesSeen = ();
-  %dirsSeen = ();
+  undef %filesSeen;
+  undef %dirsSeen;
 
   return $success;
 
@@ -277,7 +276,7 @@ sub _rget {
 
   } #end of foreach ( @files )
 
-  @files = undef; #save memory, maybe, in recursing.
+  undef @files; #save memory, maybe, in recursing.
 
   #this will do depth-first retrieval
 
@@ -367,7 +366,7 @@ sub rput{
 
   $ftp->_rput(); #do the real work here
 
-  %filesSeen = ();
+  undef %filesSeen;
 
   return $success;
 }
@@ -473,7 +472,7 @@ sub _rput {
 
   }
 
-  @files = undef; #save memory, maybe, in recursing.
+  undef @files; #save memory, maybe, in recursing.
 
   #we might use this in the loop if we follow a symlink
   #unfortunately, perl doesn't seem to keep track of
@@ -553,8 +552,8 @@ sub rdir{
 
   $ftp->_rdir;
 
-  %dirsSeen = undef;   #just make sure to cleanup for the next
-  %filesSeen = undef;  #time
+  undef %dirsSeen;   #just make sure to cleanup for the next
+  undef %filesSeen;  #time
 
   return $success;
 
@@ -633,8 +632,8 @@ sub _rdir{
 
   }
 
-  @files = undef; #mark this for cleanup, it might matter
-                  #(save memory) since we're recursing
+  undef @files; #mark this for cleanup, it might matter
+                #(save memory) since we're recursing
 
   print $fh "\n" unless $options{FilenameOnly};
 
@@ -722,7 +721,7 @@ sub _rdelete {
 
   }
 
-  @files = undef; #save memory, maybe, when recursing.
+  undef @files; #save memory, maybe, when recursing.
 
   #this will do depth-first delete
   foreach my $file (@dirs) {
@@ -952,7 +951,9 @@ sub convert_to_relative{
 
 package Net::FTP::Recursive::File;
 
-our @ISA = ();
+use vars qw/@ISA/;
+
+@ISA = ();
 
 sub new{
 
@@ -1320,7 +1321,7 @@ output with the "Debug => 1" flag turned on in the FTP object.
 
 =head1 AUTHOR
 
-Jeremiah Lee <texasjdl@yahoo.com>
+Jeremiah Lee <texasjdl_AT_yahoo.com>
 
 =head1 SEE ALSO
 
@@ -1332,7 +1333,7 @@ ftp(1), ftpd(8), RFC 959
 
 =head1 CREDITS
 
-(in Chronological order)
+(in Chronological order, sorry if I missed anyone)
 
 Andrew Winkler - for various input into the module.
 Raj Mudaliar - documentation fix.
@@ -1340,6 +1341,7 @@ Brian Reischl - for rdelete code.
 Chris Smith - for RemoveRemoteFiles code.
 Zainul Charbiwala - bug report & code to fix.
 Brian McGraw - bug report & feature request.
+Isaac Koenig - bug report
 
 =head1 COPYRIGHT
 

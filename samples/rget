@@ -16,7 +16,7 @@ $local_path = shift; #where to put dir structure on local box.
 
 chdir $local_path or die "could not change dir to $local_path!";
 
-$ftp = Net::FTP::Recursive->new($host, Debug => 1);
+$ftp = Net::FTP::Recursive->new($host, Debug => 1) or die "Could not connect to $host!";
 
 $ftp->login($username, $passwd) or die "Could not log in!";
 $ftp->binary();
