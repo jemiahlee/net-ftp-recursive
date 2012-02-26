@@ -5,6 +5,7 @@ use Net::FTP::Recursive;
 ####################################################################
 # will assume just a few args, as well as validity.
 ####################################################################
+$ftp;
 
 usage() unless @ARGV == 5;
 
@@ -23,7 +24,7 @@ $ftp->binary();
 
 $ftp->cwd($remote_path);
 
-$ftp->rget( SymlinkFollow => 1, SymlinkCopy => 1 );
+$ftp->rget( SymlinkFollow => 1 ); #, RemoveRemoteFiles => 1 );
 
 $ftp->quit;
 
@@ -34,3 +35,11 @@ sub usage {
   print STDERR "Usage: $name <host> <username> <passwd> <remote_path> <local_path>\n";
   exit;
 }
+
+
+
+
+
+
+
+
